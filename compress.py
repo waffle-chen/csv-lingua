@@ -30,6 +30,8 @@ GOLDEN_CASES = {
     ("meeting.txt", "default", 0.6): "meeting",
     ("meeting.txt", "default", 0.33): "meeting_rate033",
     ("meeting.zh-hant.txt", "default", 0.6): "zh_hant_default",
+    ("mixed.txt", "default", 0.6): "mixed",          # needs --lang default --no-protect-code
+    ("interview.txt", "default", 0.6): "interview",
     ("meeting.zh-hant.txt", "zh-hant", 0.6): "zh_hant",
 }
 

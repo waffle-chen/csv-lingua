@@ -174,7 +174,7 @@ def measure_parity(int8_model):
 
 def measure_command_line():
     print("Command line (fresh process, writes the examples)")
-    for name in ["meeting", "meeting.zh-hant", "mixed"]:
+    for name in ["meeting", "meeting.zh-hant", "mixed", "interview"]:
         output = ROOT / "examples" / f"{name}.compressed.txt"
         start = time.perf_counter()
         done = subprocess.run([sys.executable, "-B", str(ROOT / "compress.py"), str(ROOT / "examples" / f"{name}.txt"),

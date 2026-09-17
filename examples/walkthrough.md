@@ -87,7 +87,7 @@ Input (105 characters):
 ## 6. Threshold
 
 - rate 0.6 → q = int(100·(1 − 0.6) + 1) = 41
-- the 41-th percentile of this chunk's word probabilities is **0.0753**
+- the 41-th percentile of this chunk's word probabilities is **0.0860**
 - 16 of 28 words are above it
 
 ## 7. Result
