@@ -1,0 +1,10 @@
+Kevin ： 好 討 論 csv - lingua project release plan, recap tool compresses long prompts before send to LLM, save tokens money. 
+ Amy 週 用 meeting notes 測 試 減 少 40 % 的 tokens 重 點 分 保 留 下 來 。 問 題 prompt 有 程 式 碼 壓 縮 後 code 壞 掉 
+ python 
+ from csvlingua import compress _ text 
+ with open ( " notes. txt ", encoding = " utf - 8 " ) f : 
+ short = compress _ text ( f. read ( ), rate = 0. 6 ) 
+ print ( len ( short ) ) 
+ Kevin. code block should be kept, normal text should be compressed. compress _ text ( ) inline code 不 應 被 切 掉 。 
+ Amy 沒 錯 中 文 英 文 混 在 標 點 符 號 的 處 理 注 意 輸 出 奇 怪 「 ， 。 」 。 
+ Kevin, first priority for next week. 先 寫 測 試 Amy review pull request on Friday. 其 他 問 題 ？ 今 先 thanks everyone! 

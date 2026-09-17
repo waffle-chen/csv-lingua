@@ -30,6 +30,9 @@ def case_input(case):
         "meeting": (meeting, "default", 0.6),
         "meeting_rate033": (meeting, "default", 0.33),
         "no_chunk_end": (meeting.replace(".", ";").replace("\n", " "), "default", 0.6),
+        # Chinese + English + code, with Microsoft's settings (the reference has no
+        # code protection, so this case checks the tokenizer and the model on it)
+        "mixed": (read_example("mixed.txt"), "default", 0.6),
         "zh_hant_default": (read_example("meeting.zh-hant.txt"), "default", 0.6),
         "zh_hant": (read_example("meeting.zh-hant.txt"), "zh-hant", 0.6),
     }[case]
