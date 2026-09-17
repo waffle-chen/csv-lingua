@@ -37,9 +37,16 @@ HAS_INT8_MODEL = (csvlingua.MODEL_DIR / "manifest.csv").exists()
 
 
 @functools.cache
+def golden_token_ids():
+    """Every token id that appears in the reference data (so tests load only those rows)."""
+    ids = {int(row["token_id"]) for name in COMPRESSION_CASES for row in read_rows(f"{name}.tokens.csv")}
+    return sorted(ids | {int(r["token_id"]) for r in read_rows("tokenizer_tokens.csv")})
+
+
+@functools.cache
 def model(model_dir=csvlingua.FULL_MODEL_DIR):
-    """A CSV model (all embedding shards), loaded once for all tests. Default: full precision."""
-    return csvlingua.load_model(model_dir)
+    """A CSV model loaded once for all tests (only the embedding rows the golden data needs)."""
+    return csvlingua.load_model(model_dir, token_ids=golden_token_ids())
 
 
 @functools.cache

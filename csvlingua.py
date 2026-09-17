@@ -473,9 +473,9 @@ def layer_norm(x, gamma, beta, eps):
 
     x: n×768, γ: 768, β: 768 -> n×768
     """
-    mean = x.mean(axis=-1, keepdims=True)
-    var = ((x - mean) ** 2).mean(axis=-1, keepdims=True)
-    return gamma * (x - mean) / np.sqrt(var + eps) + beta
+    centered = x - x.mean(axis=-1, keepdims=True)
+    var = (centered ** 2).mean(axis=-1, keepdims=True)
+    return gamma * centered / np.sqrt(var + eps) + beta
 
 
 erf_math = np.vectorize(math.erf, otypes=[np.float64])
@@ -509,10 +509,15 @@ ERF_ONE_OVER_035 = 2.8571414947509766  # 1/0.35 as the C code compares it (high 
 
 
 def polynomial(coefficients, s):
-    """c₀ + c₁s + c₂s² + …, evaluated with Horner's rule."""
+    """c₀ + c₁s + c₂s² + …, evaluated with Horner's rule.
+
+    The steps are done in place: the arrays here are millions of numbers wide,
+    and every temporary costs a full pass through memory.
+    """
     result = np.full_like(s, coefficients[-1])
     for c in reversed(coefficients[:-1]):
-        result = result * s + c
+        np.multiply(result, s, out=result)
+        np.add(result, c, out=result)
     return result
 
 
@@ -530,26 +535,32 @@ def erf_exact(x):
     """
     x = np.asarray(x, dtype=np.float64)
     ax = np.abs(x)
-    out = np.empty_like(x)
 
-    small = ax < 0.84375
-    xs = x[small]
-    out[small] = xs + xs * (polynomial(ERF_PP, xs * xs) / polynomial(ERF_QQ, xs * xs))
+    # |x| < 0.84375 holds for most inputs, so it is computed for every element
+    # (in place, no index gathers); the rarer branches then overwrite their parts.
+    z = ax * ax
+    out = polynomial(ERF_PP, z)
+    np.divide(out, polynomial(ERF_QQ, z), out=out)
+    np.multiply(out, x, out=out)
+    np.add(out, x, out=out)
 
     middle = (ax >= 0.84375) & (ax < 1.25)
-    s = ax[middle] - 1
-    out[middle] = np.copysign(1 - (1 - ERF_ERX - polynomial(ERF_PA, s) / polynomial(ERF_QA, s)), x[middle])
+    if middle.any():
+        s = ax[middle] - 1
+        out[middle] = np.copysign(1 - (1 - ERF_ERX - polynomial(ERF_PA, s) / polynomial(ERF_QA, s)), x[middle])
 
     for low, high, R, S in [(1.25, ERF_ONE_OVER_035, ERF_RA, ERF_SA), (ERF_ONE_OVER_035, 6.0, ERF_RB, ERF_SB)]:
         tail = (ax >= low) & (ax < high)
-        a = ax[tail]
-        s = 1 / (a * a)
-        z = (a.view(np.uint64) & np.uint64(0xFFFFFFFF00000000)).view(np.float64)
-        erfc = np.exp(-z * z - 0.5625) * np.exp((z - a) * (z + a) + polynomial(R, s) / polynomial(S, s)) / a
-        out[tail] = np.copysign(1 - erfc, x[tail])
+        if tail.any():
+            a = ax[tail]
+            s = 1 / (a * a)
+            z = (a.view(np.uint64) & np.uint64(0xFFFFFFFF00000000)).view(np.float64)
+            erfc = np.exp(-z * z - 0.5625) * np.exp((z - a) * (z + a) + polynomial(R, s) / polynomial(S, s)) / a
+            out[tail] = np.copysign(1 - erfc, x[tail])
 
     large = ax >= 6
-    out[large] = np.copysign(1.0, x[large])
+    if large.any():
+        out[large] = np.copysign(1.0, x[large])
     return out
 
 
@@ -592,8 +603,9 @@ def gelu(x, erf=erf_exact):
 
 def softmax(x, axis=-1):
     """softmax(x)ᵢ = exp(xᵢ) / Σⱼ exp(xⱼ)    (the max is subtracted first so exp cannot overflow)"""
-    e = np.exp(x - x.max(axis=axis, keepdims=True))
-    return e / e.sum(axis=axis, keepdims=True)
+    e = np.subtract(x, x.max(axis=axis, keepdims=True))  # one new array, then everything in place
+    np.exp(e, out=e)
+    return np.divide(e, e.sum(axis=axis, keepdims=True), out=e)
 
 
 # =============================================================================
@@ -634,7 +646,9 @@ def self_attention(h, model, layer):
     Q = split_heads(linear(h, w[p + "query.weight"], w[p + "query.bias"]))
     K = split_heads(linear(h, w[p + "key.weight"], w[p + "key.bias"]))
     V = split_heads(linear(h, w[p + "value.weight"], w[p + "value.bias"]))
-    scores = Q @ K.transpose(0, 2, 1) / np.float32(math.sqrt(size))
+    # dividing by √64 = 8 before the product touches 8× fewer numbers, and since 8
+    # is a power of two the division is exact, so the scores are bit for bit the same
+    scores = (Q / np.float32(math.sqrt(size))) @ K.transpose(0, 2, 1)
     context = softmax(scores, axis=-1) @ V
     return context.transpose(1, 0, 2).reshape(n, d)
 
@@ -832,17 +846,18 @@ def keep_threshold(words, word_probs, reduce_rate, word_weight=None):
     return np.percentile(values, int(100 * reduce_rate + 1))
 
 
-def is_cjk_like(ch):
-    """Chinese character, or CJK / full-width punctuation (for the zh-hant join)."""
+def is_cjk_punctuation(ch):
+    """Full-width punctuation: 。，！？、：；「」（）… (CJK symbols and full-width forms)."""
     cp = ord(ch)
-    return is_chinese_char(ch) or 0x3000 <= cp <= 0x303F or 0xFF00 <= cp <= 0xFFEF
+    return 0x3000 <= cp <= 0x303F or 0xFF01 <= cp <= 0xFF65
 
 
 def words_to_text(words, lang="default"):
     """Join kept words. 'default' is exactly the reference (tokens_to_string).
 
-    'zh-hant' leaves out the space between two CJK-like characters and next to a
-    newline: ['我', '們', '。', '\\n', '好'] -> '我們。\\n好' instead of '我 們 。 \\n 好'.
+    'zh-hant' drops the space between two Chinese characters, next to full-width
+    punctuation and next to a newline, but keeps the one between Latin and Chinese
+    words: ['我', '們', '。', '\\n', 'OK', '很', '好'] -> '我們。\\nOK 很好'.
     """
     if lang != "zh-hant":
         return tokens_to_string(words)
@@ -851,8 +866,9 @@ def words_to_text(words, lang="default"):
         if i > 0:
             if word.startswith(WORDPIECE_PREFIX):
                 word = word[len(WORDPIECE_PREFIX):]
-            elif not (text.endswith("\n") or word.startswith("\n")
-                      or (text and word and is_cjk_like(text[-1]) and is_cjk_like(word[0]))):
+            elif not (text.endswith("\n") or word.startswith("\n") or not text or not word
+                      or is_cjk_punctuation(text[-1]) or is_cjk_punctuation(word[0])
+                      or (is_chinese_char(text[-1]) and is_chinese_char(word[0]))):
                 word = " " + word
         for dirty, clean in DECODER_CLEANUP:
             word = word.replace(dirty, clean)
@@ -864,6 +880,9 @@ PUNCTUATION_STRENGTH = {
     "。": 3, "？": 3, "！": 3, ".": 3, "?": 3, "!": 3,
     "；": 2, "：": 2, ";": 2, ":": 2,
     "，": 1, "、": 1, ",": 1,
+    # brackets and quotes: weakest, so a bracket left next to a real punctuation
+    # mark (its content was dropped) disappears instead of the mark
+    "「": 0, "」": 0, "『": 0, "』": 0, "（": 0, "）": 0, "《": 0, "》": 0,
 }
 
 
@@ -948,18 +967,89 @@ def apply_rate(chunks, token_map, rate, lang="default", drop_consecutive=True, w
     return "".join(c["kept_text"] for c in chunks)
 
 
-def compress(text, tokenizer, model, rate=0.6, lang="default", drop_consecutive=True,
-             erf=erf_exact, word_weight=None, on_chunk=None):
-    """compress_prompt_llmlingua2 for one text. Returns (compressed text, chunks).
+# Fenced blocks (``` or ~~~) and `inline code`: compressing these would break them,
+# so they are copied to the output untouched.
+CODE = re.compile(r"```.*?```|~~~.*?~~~|`[^`\n]+`", re.S)
+CHINESE = re.compile("[" + "".join(f"{chr(first)}-{chr(last)}" for first, last in CHINESE_RANGES) + "]")
 
-    model must contain the embedding shards for the chunks' token ids
-    (see prepare_chunks + load_model(token_ids=...)).
+
+def choose_language(text, lang="auto"):
+    """'auto' uses the Chinese settings as soon as the text contains Chinese characters."""
+    if lang != "auto":
+        return lang
+    return "zh-hant" if CHINESE.search(text) else "default"
+
+
+def split_code(text, protect_code=True):
+    """Text -> [(is_code, piece)], keeping the pieces in order."""
+    if not protect_code:
+        return [(False, text)]
+    pieces, position = [], 0
+    for match in CODE.finditer(text):
+        if match.start() > position:
+            pieces.append((False, text[position:match.start()]))
+        pieces.append((True, match.group()))
+        position = match.end()
+    pieces.append((False, text[position:]))
+    return [(is_code, piece) for is_code, piece in pieces if piece]
+
+
+def plan(text, tokenizer, lang="auto", protect_code=True):
+    """Everything that happens before the model runs.
+
+    Returns {"lang", "parts", "token_ids"}. A part is either
+        {"code": "..."}                      copied to the output unchanged, or
+        {"chunks": [...], "token_map": {...}} text to compress.
+    The plan is also what a slider needs: run_model() once, then render() per rate.
     """
+    lang = choose_language(text, lang)
     settings = SETTINGS[lang]
-    chunks, token_map = prepare_chunks(text, tokenizer, settings["force_tokens"], settings["chunk_end_tokens"])
+    parts = []
+    for is_code, piece in split_code(text, protect_code):
+        if is_code:
+            parts.append({"code": piece})
+        else:
+            chunks, token_map = prepare_chunks(piece, tokenizer, settings["force_tokens"],
+                                               settings["chunk_end_tokens"])
+            parts.append({"chunks": chunks, "token_map": token_map})
+    token_ids = [i for part in parts for chunk in part.get("chunks", []) for i in chunk["ids"]]
+    return {"lang": lang, "parts": parts, "token_ids": token_ids}
+
+
+def plan_chunks(compression_plan):
+    """Every chunk of the plan, in order."""
+    return [chunk for part in compression_plan["parts"] for chunk in part.get("chunks", [])]
+
+
+def run_model(compression_plan, model, erf=erf_exact, on_chunk=None):
+    """Step 3 for the whole plan: BERT's keep-probability for every token."""
+    compute_p_keep(plan_chunks(compression_plan), model, erf, on_chunk)
+    return compression_plan
+
+
+def render(compression_plan, rate=0.6, drop_consecutive=True, word_weight=None):
+    """Steps 4-6 for the whole plan -> the compressed text.
+
+    Cheap: the model's probabilities are already known, so another rate costs
+    only the word merging and the threshold.
+    """
+    lang = compression_plan["lang"]
+    return "".join(part["code"] if "code" in part else
+                   apply_rate(part["chunks"], part["token_map"], rate, lang, drop_consecutive, word_weight)
+                   for part in compression_plan["parts"])
+
+
+def compress(text, tokenizer, model, rate=0.6, lang="auto", drop_consecutive=True,
+             erf=erf_exact, word_weight=None, on_chunk=None, protect_code=True):
+    """compress_prompt_llmlingua2 for one text. Returns (compressed text, plan).
+
+    model must hold the embedding rows of the plan's token ids
+    (see plan() + load_model(token_ids=...)).
+    """
+    compression_plan = plan(text, tokenizer, lang, protect_code)
     if rate < 1:
-        compute_p_keep(chunks, model, erf, on_chunk)
-    return apply_rate(chunks, token_map, rate, lang, drop_consecutive, word_weight), chunks
+        run_model(compression_plan, model, erf, on_chunk)
+    return render(compression_plan, rate, drop_consecutive, word_weight), compression_plan
 
 
 # =============================================================================
@@ -979,23 +1069,25 @@ def get_tokenizer_and_model(model_dir=MODEL_DIR):
     return _loaded[model_dir]
 
 
-def compress_text(text, rate=0.6, lang="default", model_dir=MODEL_DIR):
+def compress_text(text, rate=0.6, lang="auto", model_dir=MODEL_DIR, protect_code=True):
     """Compress a string with LLMLingua-2 and return the shorter string.
 
-    rate      share of words to keep, e.g. 0.6 keeps about 60% (the model card's setting)
-    lang      "default" (model card settings) or "zh-hant" (Traditional Chinese punctuation)
-    model_dir model_csv_int8/ (default) or model_csv/ (full precision, if built)
+    rate         share of words to keep, e.g. 0.6 keeps about 60% (the model card's setting)
+    lang         "auto" (Chinese rules when the text has Chinese characters),
+                 "default" (exactly Microsoft's settings) or "zh-hant"
+    model_dir    model_csv_int8/ (default) or model_csv/ (full precision, if built)
+    protect_code ``` blocks and `inline code` are copied through untouched
     The first call loads the model (a few seconds); later calls are fast.
     """
     tokenizer, model = get_tokenizer_and_model(model_dir)
-    compressed, _ = compress(text, tokenizer, model, rate, lang)
+    compressed, _ = compress(text, tokenizer, model, rate, lang, protect_code=protect_code)
     return compressed
 
 
-def compress_file(input_path, output_path=None, rate=0.6, lang="default", model_dir=MODEL_DIR):
+def compress_file(input_path, output_path=None, rate=0.6, lang="auto", model_dir=MODEL_DIR, protect_code=True):
     """Compress a UTF-8 text file. Writes output_path if given and returns the compressed text."""
     with open(input_path, encoding="utf-8", newline="") as f:
-        compressed = compress_text(f.read(), rate, lang, model_dir)
+        compressed = compress_text(f.read(), rate, lang, model_dir, protect_code)
     if output_path is not None:
         with open(output_path, "w", encoding="utf-8", newline="") as f:
             f.write(compressed)

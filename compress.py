@@ -98,8 +98,11 @@ def main():
     parser.add_argument("--rate", type=float, default=0.6, help="share of words to keep (default 0.6)")
     parser.add_argument("--model", choices=sorted(MODELS), default="int8",
                         help="'int8' = model_csv_int8/ (default, shipped); 'full' = model_csv/ (build it with convert.py)")
-    parser.add_argument("--lang", choices=sorted(csvlingua.SETTINGS), default="default",
-                        help="'default' = model card settings; 'zh-hant' = Traditional Chinese punctuation and joining")
+    parser.add_argument("--lang", choices=["auto", *sorted(csvlingua.SETTINGS)], default="auto",
+                        help="'auto' picks zh-hant for text with Chinese characters; "
+                             "'default' = exactly the model card settings")
+    parser.add_argument("--no-protect-code", dest="protect_code", action="store_false",
+                        help="also compress ``` code blocks and `inline code` (they are kept by default)")
     parser.add_argument("--trace", help="write a CSV with every token's p_keep and keep decision")
     parser.add_argument("--fast-gelu", action="store_true",
                         help="use the Abramowitz-Stegun erf approximation instead of exact math.erf")
@@ -114,28 +117,29 @@ def main():
 
     t0 = time.perf_counter()
     tokenizer = csvlingua.load_tokenizer()
-    settings = csvlingua.SETTINGS[args.lang]
-    chunks, _ = csvlingua.prepare_chunks(text, tokenizer, settings["force_tokens"], settings["chunk_end_tokens"])
+    compression_plan = csvlingua.plan(text, tokenizer, args.lang, args.protect_code)
+    chunks = csvlingua.plan_chunks(compression_plan)
+    code_parts = sum(1 for part in compression_plan["parts"] if "code" in part)
     t1 = time.perf_counter()
-    log(f"tokenizer: {t1 - t0:.1f} s, {sum(len(c['tokens']) for c in chunks)} tokens in {len(chunks)} chunks")
+    log(f"tokenizer: {t1 - t0:.1f} s, {sum(len(c['tokens']) for c in chunks)} tokens in {len(chunks)} chunks"
+        f", language '{compression_plan['lang']}'" + (f", {code_parts} code parts kept as they are" if code_parts else ""))
 
-    model = None
     if args.rate < 1 and chunks:
         if not (MODELS[args.model] / "manifest.csv").exists():
             parser.error(f"{MODELS[args.model].name}/ not found (for --model full run: python convert.py)")
-        model = csvlingua.load_model(MODELS[args.model], token_ids=[i for c in chunks for i in c["ids"]])
+        model = csvlingua.load_model(MODELS[args.model], token_ids=compression_plan["token_ids"])
         log(f"model:     {time.perf_counter() - t1:.1f} s to load CSVs "
             f"({model['embedding_rows_loaded']} word-embedding rows)")
 
-    def on_chunk(i, chunk):
-        now = time.perf_counter()
-        log(f"chunk {i + 1}/{len(chunks)}: {len(chunk['tokens'])} tokens, BERT {now - on_chunk.last:.2f} s")
-        on_chunk.last = now
+        def on_chunk(i, chunk):
+            now = time.perf_counter()
+            log(f"chunk {i + 1}/{len(chunks)}: {len(chunk['tokens'])} tokens, BERT {now - on_chunk.last:.2f} s")
+            on_chunk.last = now
 
-    on_chunk.last = time.perf_counter()
-    erf = csvlingua.erf_abramowitz_stegun if args.fast_gelu else csvlingua.erf_exact
-    compressed, chunks = csvlingua.compress(text, tokenizer, model, args.rate, args.lang,
-                                            args.drop_consecutive, erf, on_chunk=on_chunk)
+        on_chunk.last = time.perf_counter()
+        erf = csvlingua.erf_abramowitz_stegun if args.fast_gelu else csvlingua.erf_exact
+        csvlingua.run_model(compression_plan, model, erf, on_chunk)
+    compressed = csvlingua.render(compression_plan, args.rate, args.drop_consecutive)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:
@@ -144,7 +148,7 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8", newline="")
         sys.stdout.write(compressed)
 
-    if model is not None:
+    if args.rate < 1 and chunks:
         words = sum(len(c["words"]) for c in chunks)
         kept = sum(sum(c["labels"]) for c in chunks)
         log(f"words:     {words} -> {kept} ({100 * kept / max(words, 1):.1f}% kept, target rate {args.rate})")
@@ -152,8 +156,8 @@ def main():
         if args.trace:
             write_trace(args.trace, chunks)
             log(f"trace:     {args.trace}")
-        parity = (reference_parity(args.input, args.lang, args.rate, chunks) if args.drop_consecutive
-                  else "n/a (the reference data uses drop_consecutive)")
+        parity = (reference_parity(args.input, compression_plan["lang"], args.rate, chunks)
+                  if args.drop_consecutive else "n/a (the reference data uses drop_consecutive)")
         log(f"parity:    {parity}")
     log(f"total:     {time.perf_counter() - t0:.1f} s, peak RAM {peak_memory_mb():.0f} MB")
 
