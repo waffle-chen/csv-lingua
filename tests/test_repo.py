@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ALLOWED_SUFFIXES = {".py", ".csv", ".md", ".txt"}
-ALLOWED_NAMES = {"LICENSE", "NOTICE", ".gitignore"}
+ALLOWED_NAMES = {"LICENSE", "NOTICE", ".gitignore", ".gitattributes"}
 MAX_FILE_BYTES = 50_000_000
 MAX_MODEL_BYTES = 2_000_000_000
 

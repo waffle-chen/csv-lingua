@@ -1,0 +1,2 @@
+# Keep every file byte-identical (LF) on all platforms: golden test data is compared exactly
+* text=auto eol=lf
