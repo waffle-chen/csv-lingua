@@ -77,8 +77,8 @@ class OneCallApi(unittest.TestCase):
 
 
 @unittest.skipUnless(golden_data.HAS_INT8_MODEL, "model_csv_int8/ missing")
+class Walkthrough(unittest.TestCase):
     def test_tools_walkthrough_runs(self):
-        import subprocess
         done = subprocess.run([sys.executable, "-B", str(EXAMPLES.parent / "tools" / "walkthrough.py"),
                                "Hello there, this is, um, a small test sentence about the project."],
                               capture_output=True, text=True, encoding="utf-8")
