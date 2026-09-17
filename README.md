@@ -89,6 +89,12 @@ short = compress_text(f.read(), rate=0.6)
 
 Everything is in [`csvlingua.py`](csvlingua.py), in that order. Steps 4 and 5–7 are separate calls (`run_model`, `render`), so you can run the model once and then try several rates instantly.
 
+[`examples/walkthrough.md`](examples/walkthrough.md) shows all seven steps for one sentence with the real numbers: tokens and ids, the embedding row read from the CSV, the hidden states, every keep-probability, the word probabilities and the threshold. Run it on your own text with:
+
+```bash
+python tools/walkthrough.py "your sentence here"
+```
+
 ## The CSV model
 
 `model_csv_int8/` contains `config.csv`, `vocab.csv` (all 119,647 tokens), `manifest.csv` and `weights/*.csv`. One CSV row is one matrix row. In an 8-bit file each row starts with its scale, followed by integers in [−127, 127]; the weight is `scale · integer`:

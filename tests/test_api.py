@@ -1,4 +1,6 @@
 """The one-call API: compress_text() and compress_file()."""
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -72,6 +74,17 @@ class OneCallApi(unittest.TestCase):
     def test_code_can_be_compressed_too(self):
         text = "Some words here.\n```\nfor i in range(10):\n    print(i)\n```\nAnd more words here.\n"
         self.assertNotIn("```", csvlingua.compress_text(text, rate=0.3, protect_code=False))
+
+
+@unittest.skipUnless(golden_data.HAS_INT8_MODEL, "model_csv_int8/ missing")
+    def test_tools_walkthrough_runs(self):
+        import subprocess
+        done = subprocess.run([sys.executable, "-B", str(EXAMPLES.parent / "tools" / "walkthrough.py"),
+                               "Hello there, this is, um, a small test sentence about the project."],
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for heading in ["## 1.", "## 4. BERT", "## 6. Threshold", "## 7. Result"]:
+            self.assertIn(heading, done.stdout)
 
 
 if __name__ == "__main__":
