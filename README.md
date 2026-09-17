@@ -180,6 +180,8 @@ python -m unittest   # 44 tests; those needing model_csv/ skip if it is absent
 python tools/measure.py
 ```
 
+Rebuilding is reproducible: running those two scripts again writes CSVs that are byte for byte what this repository already contains.
+
 `tools/reference_check.py` produced the golden data in `tests/golden/` by running Microsoft's own code (torch + transformers + llmlingua, see `tools/requirements-ref.txt`). Runtime code never imports it; the tests compare against the stored results.
 
 ## Questions people ask
