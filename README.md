@@ -1,113 +1,163 @@
 # csv-lingua
 
-[LLMLingua-2](https://github.com/microsoft/LLMLingua) prompt compression with the model stored **only as CSV files** and every step written in **plain Python + numpy**: a WordPiece tokenizer, BERT's math and the compression rules, with nothing hidden inside ML libraries.
+Prompt compression ([LLMLingua-2](https://github.com/microsoft/LLMLingua)) where the model is **only CSV files** and every step is **plain Python + numpy**: the WordPiece tokenizer, BERT's math and the compression rules are all written out, with nothing hidden inside an ML library.
 
-Model: [`microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank`](https://huggingface.co/microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank), shipped here as an 8-bit CSV model (`model_csv_int8/`, 0.59 GB).
+Feed it a long text, get a shorter one that keeps the important words, so a prompt costs fewer tokens.
+
+```
+John: So, um, I've been thinking about the project, you know, and I believe we need to,
+uh, make some changes. I mean, we want the project to succeed, right?
+
+  ->  John : So, ' been thinking about project, believe we need to, make changes.,
+      want project to succeed, right?
+```
+
+Model: [`microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank`](https://huggingface.co/microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank), converted to 8-bit CSV (`model_csv_int8/`, 0.59 GB, included in this repository).
 
 ```mermaid
 flowchart LR
     A[input text] --> B[WordPiece tokenizer<br/>plain Python]
-    B --> C[chunks of ≤512 tokens]
+    B --> C[chunks of 512 tokens]
     D[(model_csv_int8/<br/>CSV weights)] --> E
     C --> E[BERT in numpy<br/>12 layers]
-    E --> F[keep-probability<br/>per token]
-    F --> G[words + percentile<br/>threshold]
+    E --> F[keep-probability<br/>for every token]
+    F --> G[words above the<br/>percentile threshold]
     G --> H[compressed text]
 ```
 
 ## Quick start
 
-Requirements: Python 3.10+ and numpy.
+Needs Python 3.10+ and numpy, nothing else.
 
 ```bash
 pip install -r requirements.txt
+python compress.py examples/meeting.txt -o short.txt
 ```
 
-Compress a text file:
-
-```bash
-python compress.py examples/meeting.txt -o meeting.short.txt --rate 0.6
-python compress.py examples/meeting.zh-hant.txt --lang zh-hant
-```
-
-Compress a string from Python:
+From Python:
 
 ```python
 from csvlingua import compress_text
 
-short = compress_text(long_text, rate=0.6)             # keep about 60% of the words
-short = compress_text(chinese_text, lang="zh-hant")    # Traditional Chinese punctuation rules
+short = compress_text(long_text)                 # keeps about 60% of the words
+short = compress_text(long_text, rate=0.3)       # keeps about 30%: shorter, rougher
 ```
 
-The first call loads the model (about 13 s one file at a time). Inside an `if __name__ == "__main__":` block you can pass `workers=None` to read the CSVs on all CPU cores (about 3 s). Later calls reuse the model.
+The first call loads the model (about 4 seconds); after that each call is fast, because the model stays in memory.
 
-Options: `--rate` is the share of words to keep, `--trace file.csv` writes every token's keep-probability and decision, and `--model full` uses the full-precision model if you built it (see below).
-
-## How it works
-
-1. **Force tokens.** Characters that must survive (`\n . ! ? ,`) are protected; `\n` is replaced by the added token `[NEW0]`.
-2. **Tokenizer.** Hugging Face's BERT tokenizer rebuilt in plain Python: clean the text, split on spaces and punctuation, then greedy longest-match WordPiece.
-3. **Chunks.** Up to 510 tokens each, cut after the last `.` or newline, then `[CLS] … [SEP]`.
-4. **BERT (numpy).** `h = LayerNorm(E_word + E_pos + E_type)`, then 12 times `a = LayerNorm(h + W_o·Attention(h))` and `h = LayerNorm(a + W_2·GELU(W_1·a))`, then `p_keep = softmax(W_c·h)[:, 1]`.
-5. **Words.** A word's probability is the mean over its tokens; protected punctuation gets 1.0.
-6. **Threshold.** Per chunk, the `int(100·(1−rate)+1)`-th percentile of the word probabilities; words above it are kept.
-7. **Join** the kept words back into text.
-
-All of it lives in [`csvlingua.py`](csvlingua.py), top to bottom.
-
-## The CSV model
-
-`model_csv_int8/` holds `config.csv`, `vocab.csv` (all 119,647 tokens), `manifest.csv` and `weights/*.csv`. One CSV row is one matrix row. In an 8-bit file each row is `scale, q1, q2, …` and the weights are `scale · q`:
-
-```
-0.001104970079,-27,7,-23,8,-29,17,15,-5,17,17,28,0,-25,-9,…
-```
-
-Biases, LayerNorm and the classifier are stored as plain decimals.
-
-## Measured results
-
-Measured on an AMD Ryzen 5 5600GT (12 threads) with numpy 2.4 and Python 3.14.
+Useful options:
 
 | | |
 |---|---|
-| 8-bit CSV model size | 0.591 GB, 223 files, largest 14.4 MB |
-| Full-precision CSV model (not shipped) | 1.869 GB, 7 decimals |
-| Load time, 8-bit model | 3.1 s (all cores), 12.8 s (one file at a time) |
-| One 512-token chunk through BERT | 1.10 s |
-| 8-bit vs full precision: same keep/drop label | 98.0–100 % of words (English and Chinese, rates 0.3–0.8) |
-| 8-bit vs Microsoft's llmlingua: same label | 95.9–99.0 % of words |
-| Full precision vs Microsoft's PyTorch model | max \|Δ keep-probability\| 3.3×10⁻⁵ |
+| `--rate 0.3` | how much to keep (0.6 is the model card's setting) |
+| `--lang zh-hant` | force the Chinese rules (`auto` decides by itself) |
+| `--trace out.csv` | write every token's keep-probability and decision |
+| `--model full` | use the full-precision model, if you built it |
+| `--no-protect-code` | also compress code blocks (they are kept by default) |
 
-Why the labels are not 100 % identical to llmlingua:
+## Mixed Chinese, English and code
 
-- The reference weights each word by its GPT-3.5 token count (tiktoken) when picking the threshold. tiktoken is not used here, so each word counts once. With the reference's own token counts, the 8-bit model agrees on 98.9–100 % of the words.
-- 8-bit rounding changes a few probabilities that sit close to a threshold.
+`examples/mixed.txt` is a meeting note with all three. By default (`lang="auto"`):
 
-## Traditional Chinese (`--lang zh-hant`)
+- **Chinese**: 。，！？、：；are protected, 。！？ also end chunks, no spaces appear between Chinese characters, and punctuation left side by side after compression is tidied (`方便。，抱怨` becomes `方便。抱怨`).
+- **English**: exactly Microsoft's settings.
+- **Code**: ```` ``` ```` blocks and `` `inline code` `` are copied through untouched, because compressing them would break them.
 
-This mode adds `。，！？、：；` to the protected punctuation, and `。！？` also end chunks. It removes the spaces the English rules would put between Chinese characters. When compression leaves punctuation side by side (`。，`), only the strongest mark stays, and a mark at the start of a line is dropped.
-
-The model was fine-tuned on English meeting transcripts, so Chinese compression quality is lower than English.
-
-## Rebuilding the models
-
-```bash
-python convert.py    # downloads Microsoft's model.safetensors, writes model_csv/ (1.87 GB)
-python quantize.py   # model_csv/ -> model_csv_int8/
-python -m unittest   # tests; full-precision parity tests run only if model_csv/ exists
+~~~~
+Amy：對，我上週用我們的 meeting notes 測試過，大概可以減少 40% 的 tokens。
+```python
+short = compress_text(f.read(), rate=0.6)
 ```
 
-`tools/reference_check.py` produced the golden data in `tests/golden/` by running Microsoft's official code (it needs torch, transformers and llmlingua; see `tools/requirements-ref.txt`). Runtime code never imports it.
+  ->  Amy：週用 meeting notes 測試，減少 40% 的 tokens。
+      ```python
+      short = compress_text(f.read(), rate=0.6)
+      ```
+~~~~
+
+`lang="default"` turns all of this off and follows Microsoft's implementation exactly.
+
+## How it works
+
+1. **Protect.** Characters that must survive (`\n . ! ? ,`) are marked; `\n` is swapped for the added token `[NEW0]`. Code blocks are set aside.
+2. **Tokenize.** Hugging Face's BERT tokenizer, rebuilt in plain Python: clean the text, split on spaces and punctuation, then greedy longest-match WordPiece.
+3. **Chunk.** Up to 510 tokens, cut after the last `.` or newline, wrapped in `[CLS] … [SEP]`.
+4. **BERT** (`bert_forward`): `h = LayerNorm(E_word + E_pos + E_type)`, then 12 × (`a = LayerNorm(h + W_o·Attention(h))`, `h = LayerNorm(a + W_2·GELU(W_1·a))`), then `p_keep = softmax(W_c·h)[:, 1]`.
+5. **Words** (`merge_tokens_to_word`): a word's probability is the mean over its tokens; protected punctuation gets 1.0.
+6. **Threshold** (`keep_threshold`): per chunk, the `int(100·(1−rate)+1)`-th percentile; words above it are kept.
+7. **Join** (`words_to_text`) the kept words back into text.
+
+Everything is in [`csvlingua.py`](csvlingua.py), in that order. Steps 4 and 5–7 are separate calls (`run_model`, `render`), so you can run the model once and then try several rates instantly.
+
+## The CSV model
+
+`model_csv_int8/` contains `config.csv`, `vocab.csv` (all 119,647 tokens), `manifest.csv` and `weights/*.csv`. One CSV row is one matrix row. In an 8-bit file each row starts with its scale, followed by integers in [−127, 127]; the weight is `scale · integer`:
+
+```
+0.001104970079,-27,7,-23,8,-29,17,15,-5,17,17,28,0,-25,-9,-22,-40,20,42,-23,...
+```
+
+`vocab.csv` is just as plain:
+
+```
+id,token,special
+101,[CLS],1
+31178,Hello,0
+119547,[NEW0],1
+```
+
+Biases, LayerNorm parameters and the classifier stay as 7-decimal numbers. The files are read by a small parser in `csvlingua.py` that turns whole blocks of text into numbers with array operations, which is several times faster than `np.loadtxt` and gives exactly the same values.
+
+## Measured results
+
+All numbers come from a real run of `python tools/measure.py` on an AMD Ryzen 5 5600GT (6 cores / 12 threads), Python 3.14, numpy 2.4, and are stored in [`examples/results.csv`](examples/results.csv).
+
+| | |
+|---|---|
+| 8-bit model | **0.591 GB**, 223 files, largest 14.4 MB |
+| Full-precision model (optional, not shipped) | 1.869 GB |
+| Load for one document | **3.8 s** (only the embedding rows the text needs) |
+| One 512-token chunk through BERT | **0.98 s** (2.46 s in the first version) |
+| Whole run: 7 kB meeting → 906 of 1534 words | **7.5 s**, 821 MB RAM |
+| Tokenizer | 3.6 M characters/s |
+| CSV parser | 29 MB/s on one thread, 76 MB/s on all cores |
+
+Accuracy against Microsoft's official implementation (llmlingua 0.2.2 with PyTorch), over 7,268 tokens of English and Chinese:
+
+| | |
+|---|---|
+| Keep/drop decision, 8-bit model | **95.9–99.0 %** of words identical |
+| … when given the reference's GPT-3.5 token counts | **98.9–100 %** |
+| 8-bit vs full-precision model | 98.0–100 % of words identical |
+| Full-precision CSV vs PyTorch | max \|Δ keep-probability\| **3.3×10⁻⁵** |
+
+Where the remaining differences come from:
+
+1. The reference weights each word by its GPT-3.5 (tiktoken) token count when it picks the threshold. tiktoken is not a dependency here, so every word counts once. That alone changes 219 of 6,860 words.
+2. 8-bit rounding moves probabilities that sit right at the threshold.
+
+Speed-ups were checked to be **bit-identical**: the keep-probabilities of 19 chunks, and the compressed text for 8 texts × 2 languages × 4 rates, are unchanged from the first, slow implementation.
+
+## Rebuilding
+
+```bash
+python convert.py    # download Microsoft's model.safetensors, write model_csv/ (1.87 GB, 7 decimals)
+python quantize.py   # model_csv/ -> model_csv_int8/ (0.59 GB)
+python -m unittest   # 44 tests; those needing model_csv/ skip if it is absent
+python tools/measure.py
+```
+
+`tools/reference_check.py` produced the golden data in `tests/golden/` by running Microsoft's own code (torch + transformers + llmlingua, see `tools/requirements-ref.txt`). Runtime code never imports it; the tests compare against the stored results.
 
 ## Limits
 
-- CPU only, and much slower than PyTorch.
-- Characters missing from the vocabulary become `[UNK]` and are dropped, as in the reference.
-- `target_token` and the other llmlingua options that need tiktoken are not implemented.
+- CPU only, and far slower than PyTorch: this is built to be read, not to be fast.
+- Characters missing from the vocabulary become `[UNK]` and disappear, exactly as in the reference (1 of 326 distinct characters in the Chinese example).
+- The model was fine-tuned on English meeting transcripts, so Chinese results are weaker than English.
+- Options that need tiktoken (`target_token`) are not implemented.
 
 ## Credits and licenses
 
-- Code: MIT (see `LICENSE`).
-- The CSV models are a converted form of Microsoft's model, which is Apache-2.0 (see `NOTICE` and `LICENSE-MODEL.txt`).
-- The algorithm comes from LLMLingua-2 (Pan et al., 2024, arXiv:2403.12968).
+- Code: MIT (`LICENSE`).
+- The CSV models are a converted form of Microsoft's model, Apache-2.0 (`NOTICE`, `LICENSE-MODEL.txt`).
+- Algorithm: LLMLingua-2, Pan et al. 2024, [arXiv:2403.12968](https://arxiv.org/abs/2403.12968).

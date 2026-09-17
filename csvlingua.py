@@ -250,9 +250,10 @@ def tokens_to_string(tokens):
 # =============================================================================
 # Part 2  Reading the CSV model
 #
-# model_csv/config.csv     key,value
-# model_csv/manifest.csv   tensor,file,first_row,rows,cols,ndim  (one line per file)
-# model_csv/weights/*.csv  one CSV row = one matrix row; biases and γ/β are one row
+# config.csv     key,value: architecture, tokenizer settings, how the CSVs were written
+# vocab.csv      id,token,special for all 119,647 tokens
+# manifest.csv   tensor,file,first_row,rows,cols,ndim,storage (one line per file)
+# weights/*.csv  one CSV row = one matrix row; biases and LayerNorm γ/β are one row
 # =============================================================================
 
 WORD_EMBEDDINGS = "bert.embeddings.word_embeddings.weight"
@@ -956,8 +957,8 @@ def compute_p_keep(chunks, model, erf=erf_exact, on_chunk=None):
 def apply_rate(chunks, token_map, rate, lang="default", drop_consecutive=True, word_weight=None):
     """Steps 4-6 for every chunk, using the stored p_keep -> compressed text.
 
-    The model does not depend on the rate, so this can be re-run instantly for
-    another rate (the GUI's slider does exactly that).
+    The model's probabilities do not depend on the rate, so this can be re-run
+    for another rate without touching the model.
     """
     if rate >= 1:  # reduce_rate 0: the reference returns the chunk strings untouched
         return restore_force_tokens("".join(c["text"] for c in chunks), token_map)
@@ -1000,7 +1001,8 @@ def plan(text, tokenizer, lang="auto", protect_code=True):
     Returns {"lang", "parts", "token_ids"}. A part is either
         {"code": "..."}                      copied to the output unchanged, or
         {"chunks": [...], "token_map": {...}} text to compress.
-    The plan is also what a slider needs: run_model() once, then render() per rate.
+    Keeping the plan lets a caller run the model once and then render several
+    rates (a slider, a search for a token budget) without running BERT again.
     """
     lang = choose_language(text, lang)
     settings = SETTINGS[lang]
