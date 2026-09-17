@@ -147,10 +147,10 @@ All numbers come from a real run of `python tools/measure.py` on an AMD Ryzen 5 
 | 8-bit model | **0.591 GB**, 223 files, largest 14.4 MB |
 | Full-precision model (optional, not shipped) | 1.869 GB |
 | Load for one document | **3.8 s** (only the embedding rows the text needs) |
-| One 512-token chunk through BERT | **0.97 s** (2.49 s in the first version) |
-| Whole run: 7 kB meeting → 856 of 1,534 words | **7.6 s**, 838 MB RAM |
+| One 512-token chunk through BERT | **0.93 s** (2.47 s in the first version) |
+| Whole run: 7 kB meeting → 856 of 1,534 words | **7.4 s**, 822 MB RAM |
 | Tokenizer | 3.6 M characters/s |
-| CSV parser | 30 MB/s on one thread, 86 MB/s on all cores |
+| CSV parser | 27 MB/s on one thread, 87 MB/s on all cores |
 | Long document: 104 kB, 50 chunks | 3.8 s load + 46 s BERT, about 2 k characters/s |
 
 Accuracy against Microsoft's official implementation (llmlingua 0.2.2 with PyTorch), over 7,268 tokens of English and Chinese:
