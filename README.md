@@ -31,8 +31,10 @@ Needs Python 3.10+ and numpy, nothing else.
 
 ```bash
 pip install -r requirements.txt
-python compress.py examples/meeting.txt -o short.txt
+python compress.py examples/meeting.txt -o short.txt     # or: python -m csvlingua examples/meeting.txt
 ```
+
+Checked on Python 3.10 (numpy 2.2) and Python 3.14 (numpy 2.4).
 
 From Python:
 

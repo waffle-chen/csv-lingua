@@ -1135,3 +1135,9 @@ def compress_file(input_path, output_path=None, rate=0.6, lang="auto", model_dir
         with open(output_path, "w", encoding="utf-8", newline="") as f:
             f.write(compressed)
     return compressed
+
+
+if __name__ == "__main__":  # "python -m csvlingua file.txt" does the same as "python compress.py file.txt"
+    import compress
+
+    compress.main()
