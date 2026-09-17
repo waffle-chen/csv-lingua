@@ -281,18 +281,20 @@ POWERS_OF_TEN = 10.0 ** np.arange(19)
 def parse_csv_block(raw):
     """Whole CSV lines (ASCII bytes) -> (float64 values, number of columns).
 
-    The files only contain digits, '-', '.', ',' and newlines, so the whole block
-    can be turned into numbers with array operations instead of parsing number by
-    number. Reading "12.75" works like this:
+    The files hold nothing but digits, '-', '.', ',' and newlines, so the whole
+    block becomes numbers through array operations, instead of one number at a
+    time. For "12.75" the steps are:
 
-        place   digits from this character to the end of its number: 4 3 . 2 1
-        mantissa  sum of digit·10^(digits after it)  =  1275   (exact, integers)
-        value     mantissa / 10^(digits after the '.')  =  1275 / 100
+        character         1     2     .     7     5
+        place             4     3     2     2     1   digits up to the end of the number
+        digit·10^(place−1) 1000   200     -    70     5
+        mantissa          1000 + 200 + 70 + 5 = 1275      (whole numbers, exact)
+        value             1275 / 10^2 = 12.75             ('.' has place 2)
 
-    The mantissa is exact (at most 13 digits, so below 2^53) and 10^k is exact, so
-    the single division at the end is correctly rounded: the values are identical
-    to what a C parser such as np.loadtxt returns, only several times faster, and
-    numpy releases the GIL, so blocks can be parsed on several threads.
+    The mantissa is exact (at most 13 digits, below 2^53) and powers of ten are
+    exact, so the single division at the end is correctly rounded: every value is
+    identical to what a C parser such as np.loadtxt returns. It is also several
+    times faster, and numpy releases the GIL, so blocks can be parsed on threads.
     """
     b = np.frombuffer(raw, dtype=np.uint8)
     separator = (b == 44) | (b == 10)  # ',' or '\n'
@@ -438,7 +440,7 @@ def load_model(model_dir=MODEL_DIR, token_ids=None):
 
     embeddings = load_word_embeddings(model_dir, manifest, token_ids)
     model = make_model(config, weights, embeddings)
-    model["embedding_rows_loaded"] = len(embeddings) if isinstance(embeddings, dict) else len(embeddings)
+    model["embedding_rows_loaded"] = len(embeddings)
     return model
 
 

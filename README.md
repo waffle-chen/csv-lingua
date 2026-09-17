@@ -95,6 +95,19 @@ Everything is in [`csvlingua.py`](csvlingua.py), in that order. Steps 4 and 5–
 python tools/walkthrough.py "your sentence here"
 ```
 
+## What is where
+
+| file | what it is |
+|---|---|
+| [`csvlingua.py`](csvlingua.py) | everything: tokenizer, CSV reading, the math, BERT, compression, `compress_text` |
+| [`compress.py`](compress.py) | the command line |
+| [`convert.py`](convert.py) | Microsoft's `model.safetensors` → `model_csv/` (the only file that reads the binary) |
+| [`quantize.py`](quantize.py) | `model_csv/` → `model_csv_int8/` |
+| [`model_csv_int8/`](model_csv_int8) | the shipped model: config, vocabulary, manifest, weights |
+| [`examples/`](examples) | input texts, their compressed output, traces, measurements, walkthrough |
+| [`tests/`](tests) | unit tests plus `golden/`: what Microsoft's code produced for the same inputs |
+| [`tools/`](tools) | dev only: `reference_check.py`, `measure.py`, `walkthrough.py` |
+
 ## The CSV model
 
 `model_csv_int8/` contains `config.csv`, `vocab.csv` (all 119,647 tokens), `manifest.csv` and `weights/*.csv`. One CSV row is one matrix row. In an 8-bit file each row starts with its scale, followed by integers in [−127, 127]; the weight is `scale · integer`:
