@@ -45,6 +45,15 @@ short = compress_text(long_text, rate=0.3)       # keeps about 30%: shorter, rou
 
 The first call loads the model (about 4 seconds); after that each call is fast, because the model stays in memory.
 
+What the rate does to one sentence (real output, model-card example):
+
+| rate | result |
+|---|---|
+| 0.9 | John : So, um, I ' ve been thinking about the project, know, I believe we need to, make some changes. … |
+| 0.6 | John :, ' been thinking about project, believe we need to, make changes., want project to succeed, right? … |
+| 0.4 | John, thinking about project, need, make changes., want project succeed,?, consider revising timeline. |
+| 0.2 | , project changes., project succeed?, timeline. |
+
 Useful options:
 
 | | |
@@ -140,6 +149,7 @@ All numbers come from a real run of `python tools/measure.py` on an AMD Ryzen 5 
 | Whole run: 7 kB meeting → 906 of 1534 words | **7.5 s**, 821 MB RAM |
 | Tokenizer | 3.6 M characters/s |
 | CSV parser | 29 MB/s on one thread, 76 MB/s on all cores |
+| Long document: 104 kB, 50 chunks | 3.8 s load + 46 s BERT, about 2 k characters/s |
 
 Accuracy against Microsoft's official implementation (llmlingua 0.2.2 with PyTorch), over 7,268 tokens of English and Chinese:
 
@@ -156,6 +166,8 @@ Where the remaining differences come from:
 2. 8-bit rounding moves probabilities that sit right at the threshold.
 
 Speed-ups were checked to be **bit-identical**: the keep-probabilities of 19 chunks, and the compressed text for 8 texts × 2 languages × 4 rates, are unchanged from the first, slow implementation.
+
+One caveat about "identical": numpy's BLAS adds up matrix products in an order that depends on how many threads it uses, so the last bits of a keep-probability can move if you run with a different thread count (`OPENBLAS_NUM_THREADS`). That is below the differences against the reference reported above, and it never changed a keep/drop decision in these tests, but it is why chunks are not processed in parallel here.
 
 ## Rebuilding
 
