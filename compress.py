@@ -125,7 +125,7 @@ def main():
             parser.error(f"{MODELS[args.model].name}/ not found (for --model full run: python convert.py)")
         model = csvlingua.load_model(MODELS[args.model], token_ids=[i for c in chunks for i in c["ids"]])
         log(f"model:     {time.perf_counter() - t1:.1f} s to load CSVs "
-            f"(word-embedding shards {model['shards_loaded']})")
+            f"({model['embedding_rows_loaded']} word-embedding rows)")
 
     def on_chunk(i, chunk):
         now = time.perf_counter()

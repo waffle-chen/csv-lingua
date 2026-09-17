@@ -1,0 +1,14 @@
+Kevin：大家好，今天我們要討論 csv-lingua 這個 project 的 release plan。First, let me quickly recap what the tool does: it compresses long prompts before we send them to an LLM, so we save tokens and money.
+Amy：對，我上週用我們的 meeting notes 測試過，大概可以減少 40% 的 tokens，而且重點大部分都有保留下來。不過有一個問題，如果 prompt 裡面有程式碼，壓縮之後 code 就壞掉了，例如這段：
+
+```python
+from csvlingua import compress_text
+
+with open("notes.txt", encoding="utf-8") as f:
+    short = compress_text(f.read(), rate=0.6)
+print(len(short))
+```
+
+Kevin：I see. So the code block should be kept exactly as it is, and only the normal text around it should be compressed. 另外，像 `compress_text()` 這種 inline code 也不應該被切掉。
+Amy：沒錯。還有，中文和英文混在一起的時候，標點符號的處理也要注意，不然輸出會很奇怪，像是「，。」連在一起。
+Kevin：OK, let's make that the first priority for next week. 我會先寫測試，then Amy can review the pull request on Friday. 有其他問題嗎？沒有的話，今天就先到這裡，thanks everyone!

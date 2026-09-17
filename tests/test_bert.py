@@ -30,16 +30,19 @@ class FullModelParity(unittest.TestCase):
 
 
 class ModelFiles(unittest.TestCase):
-    def test_only_needed_embedding_shards_are_loaded(self):
+    def test_only_needed_embedding_rows_are_loaded(self):
         manifest = csvlingua.read_manifest()
-        needed = csvlingua.embedding_shards_needed(manifest, [101, 102, 119646])
-        shards = manifest[csvlingua.WORD_EMBEDDINGS]
-        self.assertEqual(needed, [shards[0], shards[-1]])
-        self.assertEqual(sum(e["rows"] for e in shards), 119647)
+        self.assertEqual(sum(e["rows"] for e in manifest[csvlingua.WORD_EMBEDDINGS]), 119647)
+        wanted = [101, 102, 119646]
+        table = csvlingua.load_word_embeddings(csvlingua.MODEL_DIR, manifest, wanted)
+        self.assertEqual(sorted(table), wanted)
+        model = csvlingua.load_model(token_ids=wanted)
+        self.assertEqual(model["embedding_rows_loaded"], 3)
+        np.testing.assert_array_equal(csvlingua.lookup_word_embeddings([102], model), [table[102]])
 
-    def test_missing_shard_is_reported(self):
+    def test_missing_embedding_row_is_reported(self):
         model = csvlingua.make_model({"hidden_size": 4, "num_hidden_layers": 0, "num_attention_heads": 1,
-                                      "layer_norm_eps": "1e-12"}, {}, [(0, np.zeros((10, 4), np.float32))])
+                                      "layer_norm_eps": "1e-12"}, {}, {9: np.zeros(4, np.float32)})
         self.assertEqual(csvlingua.lookup_word_embeddings([9], model).shape, (1, 4))
         with self.assertRaises(KeyError):
             csvlingua.lookup_word_embeddings([10], model)

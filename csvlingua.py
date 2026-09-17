@@ -25,7 +25,7 @@ import math
 import os
 import re
 import unicodedata
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -274,40 +274,120 @@ def read_manifest(model_dir=MODEL_DIR):
     return manifest
 
 
-def load_csv_matrix(path, storage="float"):
-    """One weight CSV file -> rows×cols float32 array.
+POWERS_OF_TEN = 10.0 ** np.arange(19)
 
-    storage "float": every weight is written out as a decimal number.
-    storage "int8":  every row is  s, q₁, …, q_cols  with integers q in [−127, 127]
-                     and the row's scale s first; the weights are W_r = s_r·q_r
-                     (made by quantize.py).
+
+def parse_csv_block(raw):
+    """Whole CSV lines (ASCII bytes) -> (float64 values, number of columns).
+
+    The files only contain digits, '-', '.', ',' and newlines, so the whole block
+    can be turned into numbers with array operations instead of parsing number by
+    number. Reading "12.75" works like this:
+
+        place   digits from this character to the end of its number: 4 3 . 2 1
+        mantissa  sum of digit·10^(digits after it)  =  1275   (exact, integers)
+        value     mantissa / 10^(digits after the '.')  =  1275 / 100
+
+    The mantissa is exact (at most 13 digits, so below 2^53) and 10^k is exact, so
+    the single division at the end is correctly rounded: the values are identical
+    to what a C parser such as np.loadtxt returns, only several times faster, and
+    numpy releases the GIL, so blocks can be parsed on several threads.
     """
-    matrix = np.loadtxt(path, delimiter=",", dtype=np.float32, ndmin=2)
-    if storage == "int8":
-        return matrix[:, 1:] * matrix[:, :1]
-    return matrix
+    b = np.frombuffer(raw, dtype=np.uint8)
+    separator = (b == 44) | (b == 10)  # ',' or '\n'
+    digit = (b >= 48) & (b <= 57)
+    digits_to_buffer_end = np.cumsum(digit[::-1], dtype=np.int32)[::-1]
+    at_number_end = np.where(separator, digits_to_buffer_end, np.int32(-1))
+    at_number_end = np.maximum.accumulate(at_number_end[::-1])[::-1]  # value at the next separator
+    place = digits_to_buffer_end - at_number_end  # digits up to the end of this number
+
+    ends = np.flatnonzero(separator)
+    starts = np.empty(ends.size, np.int64)
+    starts[0] = 0
+    starts[1:] = ends[:-1] + 1
+    mantissa = np.add.reduceat((b - 48) * digit * POWERS_OF_TEN[place - digit], starts)
+
+    decimals = np.zeros(ends.size, np.int64)
+    dots = np.flatnonzero(b == 46)
+    if dots.size:
+        decimals[np.searchsorted(ends, dots)] = place[dots]
+    values = mantissa / POWERS_OF_TEN[decimals]
+    minus = np.flatnonzero(b == 45)
+    if minus.size:
+        negative = np.searchsorted(ends, minus)
+        values[negative] = -values[negative]
+
+    columns = int(np.count_nonzero(separator[:int(np.flatnonzero(b == 10)[0]) + 1]))
+    return values, columns
 
 
-def load_csv_matrices(paths, storages, workers=None):
-    """Load many CSV files at the same time, one process per CPU core.
+BLOCK_BYTES = 1 << 20  # parse about a megabyte at a time: big enough to be fast, small enough to stay in cache
 
-    np.loadtxt holds Python's GIL, so threads would not help, but separate
-    processes do (about 5× faster on a 12-thread CPU). The arrays travel back
-    through the process pool's in-memory pipe; nothing is written to disk.
-    workers=1 loads the files one after another in this process.
+
+def split_rows(raw, block_bytes=BLOCK_BYTES):
+    """Cut CSV bytes into pieces of about block_bytes that each end on a line break."""
+    cuts = [0]
+    while cuts[-1] + block_bytes < len(raw):
+        newline = raw.find(b"\n", cuts[-1] + block_bytes)
+        if newline < 0:
+            break
+        cuts.append(newline + 1)
+    cuts.append(len(raw))
+    return [raw[a:b] for a, b in zip(cuts, cuts[1:]) if b > a]
+
+
+def parse_csv_bytes(raw, parallel=False):
+    """CSV bytes -> rows×columns float32 array.
+
+    The pieces are independent, so parsing them on several threads (parallel=True)
+    produces exactly the same numbers as parsing them one after another.
     """
-    if workers == 1 or len(paths) < 2:
-        return [load_csv_matrix(p, s) for p, s in zip(paths, storages)]
-    with ProcessPoolExecutor(workers) as pool:
-        return list(pool.map(load_csv_matrix, paths, storages, chunksize=4))
+    pieces = split_rows(raw)
+    if parallel and len(pieces) > 1:
+        parsed = list(thread_pool().map(parse_csv_block, pieces))
+    else:
+        parsed = [parse_csv_block(piece) for piece in pieces]
+    values = np.concatenate([v for v, _ in parsed]).astype(np.float32)
+    return values.reshape(-1, parsed[0][1])
 
 
-def make_model(config, weights, word_embedding_shards):
+def dequantize(matrix, storage):
+    """int8 files store  scale, q₁, …, q_cols  per row; the weights are W_r = s_r·q_r."""
+    return matrix[:, 1:] * matrix[:, :1] if storage == "int8" else matrix
+
+
+def load_csv_matrix(path, storage="float", parallel=False):
+    """One weight CSV file -> rows×cols float32 array."""
+    with open(path, "rb") as f:
+        return dequantize(parse_csv_bytes(f.read(), parallel), storage)
+
+
+def load_csv_matrices(paths, storages):
+    """Load several weight CSVs at once: one thread per file, all CPU cores busy."""
+    return list(thread_pool().map(load_csv_matrix, paths, storages))
+
+
+def load_csv_rows(path, rows, storage="float"):
+    """Only the given row numbers of a weight CSV -> len(rows)×cols float32 array.
+
+    The word-embedding table has 119,647 rows but a text uses only a few thousand
+    of them, so the file is read (fast) and only the interesting lines are parsed.
+    """
+    with open(path, "rb") as f:
+        raw = f.read()
+    line_ends = np.flatnonzero(np.frombuffer(raw, dtype=np.uint8) == 10)
+    line_starts = np.concatenate([[0], line_ends[:-1] + 1])
+    wanted = b"".join(raw[line_starts[r]:line_ends[r] + 1] for r in rows)
+    return dequantize(parse_csv_bytes(wanted, parallel=True), storage)
+
+
+def make_model(config, weights, word_embeddings):
     """Bundle everything the forward pass needs.
 
-    config                 {key: str} from config.csv
-    weights                {tensor name: float32 array}, word embeddings excluded
-    word_embedding_shards  [(first_row, rows×768 array)] - only the parts that were loaded
+    config           {key: str} from config.csv
+    weights          {tensor name: float32 array}, word embeddings excluded
+    word_embeddings  {token id: 768-vector} for the ids that were loaded,
+                     or the whole table as one array indexed by token id
     """
     return {
         "hidden_size": int(config["hidden_size"]),
@@ -315,59 +395,61 @@ def make_model(config, weights, word_embedding_shards):
         "num_heads": int(config["num_attention_heads"]),
         "eps": np.float32(config["layer_norm_eps"]),
         "weights": weights,
-        "word_embedding_shards": word_embedding_shards,
+        "word_embeddings": word_embeddings,
     }
 
 
-def load_model(model_dir=MODEL_DIR, token_ids=None, workers=None):
+def load_word_embeddings(model_dir, manifest, token_ids=None):
+    """Load the word-embedding rows for token_ids (the whole table when None)."""
+    entries = manifest[WORD_EMBEDDINGS]
+    if token_ids is None:
+        return np.concatenate(load_csv_matrices([Path(model_dir) / e["file"] for e in entries],
+                                                [e["storage"] for e in entries]))
+    vectors = {}
+    for entry in entries:
+        first, last = entry["first_row"], entry["first_row"] + entry["rows"]
+        ids = sorted(i for i in set(token_ids) if first <= i < last)
+        if ids:
+            rows = load_csv_rows(Path(model_dir) / entry["file"], [i - first for i in ids], entry["storage"])
+            vectors.update(zip(ids, rows))
+    return vectors
+
+
+def load_model(model_dir=MODEL_DIR, token_ids=None):
     """Read the CSV model into numpy arrays.
 
-    The word-embedding table is half the model, so only the shards that hold
-    the given token_ids are read (all shards when token_ids is None).
+    token_ids: load only those rows of the word-embedding table (half the model);
+    None loads the whole table.
     """
     model_dir = Path(model_dir)
     config = read_key_value_csv(model_dir / "config.csv")
     manifest = read_manifest(model_dir)
 
     wanted = [(name, e) for name, entries in manifest.items() if name != WORD_EMBEDDINGS for e in entries]
-    wanted += [(WORD_EMBEDDINGS, e) for e in embedding_shards_needed(manifest, token_ids)]
-    matrices = load_csv_matrices([model_dir / e["file"] for _, e in wanted], [e["storage"] for _, e in wanted], workers)
-
-    parts, shards = {}, []
-    for (name, entry), matrix in zip(wanted, matrices):
-        if name == WORD_EMBEDDINGS:
-            shards.append((entry["first_row"], matrix))
-        else:
-            parts.setdefault(name, []).append(matrix)
+    matrices = load_csv_matrices([model_dir / e["file"] for _, e in wanted], [e["storage"] for _, e in wanted])
+    parts = {}
+    for (name, _), matrix in zip(wanted, matrices):
+        parts.setdefault(name, []).append(matrix)
     weights = {}
     for name, pieces in parts.items():
         matrix = np.concatenate(pieces)
         weights[name] = matrix[0] if manifest[name][0]["ndim"] == 1 else matrix
 
-    model = make_model(config, weights, shards)
-    model["shards_loaded"] = f"{len(shards)}/{len(manifest[WORD_EMBEDDINGS])}"
+    embeddings = load_word_embeddings(model_dir, manifest, token_ids)
+    model = make_model(config, weights, embeddings)
+    model["embedding_rows_loaded"] = len(embeddings) if isinstance(embeddings, dict) else len(embeddings)
     return model
 
 
-def embedding_shards_needed(manifest, token_ids=None):
-    """The word-embedding shard entries that contain at least one of token_ids (all if None)."""
-    entries = manifest[WORD_EMBEDDINGS]
-    if token_ids is None:
-        return entries
-    return [e for e in entries if any(e["first_row"] <= i < e["first_row"] + e["rows"] for i in set(token_ids))]
-
-
 def lookup_word_embeddings(ids, model):
-    """E_word[ids]: find each token's row in the loaded shards.   ids: n -> n×768"""
-    vectors = []
-    for token_id in ids:
-        for first_row, matrix in model["word_embedding_shards"]:
-            if first_row <= token_id < first_row + len(matrix):
-                vectors.append(matrix[token_id - first_row])
-                break
-        else:
-            raise KeyError(f"token id {token_id}: its embedding shard was not loaded")
-    return np.stack(vectors)
+    """E_word[ids]: the embedding vector of every token.   ids: n -> n×768"""
+    table = model["word_embeddings"]
+    if not isinstance(table, dict):
+        return table[ids]
+    try:
+        return np.stack([table[i] for i in ids])
+    except KeyError as missing:
+        raise KeyError(f"token id {missing.args[0]} was not loaded; pass its id to load_model(token_ids=...)") from None
 
 
 # =============================================================================
@@ -887,22 +969,17 @@ def compress(text, tokenizer, model, rate=0.6, lang="default", drop_consecutive=
 _loaded = {}
 
 
-def get_tokenizer_and_model(model_dir=MODEL_DIR, workers=1):
-    """Load the tokenizer and the whole model once; later calls reuse them.
-
-    workers=1 reads the CSV files one by one (safe anywhere). workers=None uses
-    all CPU cores, about 4× faster, but on Windows and macOS it starts new Python
-    processes, so the calling script needs an  if __name__ == "__main__":  guard.
-    """
+def get_tokenizer_and_model(model_dir=MODEL_DIR):
+    """Load the tokenizer and the whole model once; later calls reuse them."""
     model_dir = Path(model_dir)
     if model_dir not in _loaded:
         if not (model_dir / "manifest.csv").exists():
             raise FileNotFoundError(f"{model_dir} has no manifest.csv (full model: run convert.py; int8: quantize.py)")
-        _loaded[model_dir] = (load_tokenizer(model_dir), load_model(model_dir, workers=workers))
+        _loaded[model_dir] = (load_tokenizer(model_dir), load_model(model_dir))
     return _loaded[model_dir]
 
 
-def compress_text(text, rate=0.6, lang="default", model_dir=MODEL_DIR, workers=1):
+def compress_text(text, rate=0.6, lang="default", model_dir=MODEL_DIR):
     """Compress a string with LLMLingua-2 and return the shorter string.
 
     rate      share of words to keep, e.g. 0.6 keeps about 60% (the model card's setting)
@@ -910,15 +987,15 @@ def compress_text(text, rate=0.6, lang="default", model_dir=MODEL_DIR, workers=1
     model_dir model_csv_int8/ (default) or model_csv/ (full precision, if built)
     The first call loads the model (a few seconds); later calls are fast.
     """
-    tokenizer, model = get_tokenizer_and_model(model_dir, workers)
+    tokenizer, model = get_tokenizer_and_model(model_dir)
     compressed, _ = compress(text, tokenizer, model, rate, lang)
     return compressed
 
 
-def compress_file(input_path, output_path=None, rate=0.6, lang="default", model_dir=MODEL_DIR, workers=1):
+def compress_file(input_path, output_path=None, rate=0.6, lang="default", model_dir=MODEL_DIR):
     """Compress a UTF-8 text file. Writes output_path if given and returns the compressed text."""
     with open(input_path, encoding="utf-8", newline="") as f:
-        compressed = compress_text(f.read(), rate, lang, model_dir, workers)
+        compressed = compress_text(f.read(), rate, lang, model_dir)
     if output_path is not None:
         with open(output_path, "w", encoding="utf-8", newline="") as f:
             f.write(compressed)
