@@ -48,6 +48,27 @@ class OneCallApi(unittest.TestCase):
         text = "You should really call `compress_text(x, rate=0.6)` before you send the prompt, I think."
         self.assertIn("`compress_text(x, rate=0.6)`", csvlingua.compress_text(text, rate=0.4))
 
+    def test_empty_and_tiny_inputs(self):
+        self.assertEqual(csvlingua.compress_text(""), "")
+        self.assertEqual(csvlingua.compress_text("   \n\n  "), "\n")  # newlines are protected
+        self.assertEqual(csvlingua.compress_text("Hi.", rate=1.0), "Hi.")
+        self.assertEqual(csvlingua.compress_text("Hi."), ".")  # 2 words: only the protected '.' survives
+
+    def test_only_code(self):
+        code = "```\nprint(1)\n```"
+        self.assertEqual(csvlingua.compress_text(code, rate=0.2), code)
+
+    def test_windows_line_endings(self):
+        text = "First line, you know.\r\nSecond line, I mean, is here.\r\n"
+        short = csvlingua.compress_text(text, rate=0.5)
+        self.assertNotIn("\r", short)
+        self.assertIn("\n", short)
+
+    def test_rate_must_be_sensible(self):
+        for rate in (0, -0.5, 1.5):
+            with self.assertRaises(ValueError):
+                csvlingua.compress_text("some text here", rate=rate)
+
     def test_code_can_be_compressed_too(self):
         text = "Some words here.\n```\nfor i in range(10):\n    print(i)\n```\nAnd more words here.\n"
         self.assertNotIn("```", csvlingua.compress_text(text, rate=0.3, protect_code=False))

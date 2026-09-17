@@ -1,5 +1,5 @@
-Kevin：家好，今討論 csv - lingua project release plan。recap tool compresses long prompts before send to LLM, save tokens money.
-Amy：週用 meeting notes 測試，減少 40 % 的 tokens，重點保留下來。問題，prompt 有程式碼，壓縮後 code 壞掉了，例如段：
+Kevin：家好，今討論 csv-lingua project release plan。recap tool compresses long prompts before send to LLM, save tokens money.
+Amy：週用 meeting notes 測試，減少 40% 的 tokens，重點保留下來。問題，prompt 有程式碼，壓縮後 code 壞掉了，例如段：
 ```python
 from csvlingua import compress_text
 
@@ -7,6 +7,6 @@ with open("notes.txt", encoding="utf-8") as f:
     short = compress_text(f.read(), rate=0.6)
 print(len(short))
 ```
-Kevin：see. code block should kept as, only normal text should compressed. 另外，`compress_text()`inline code 不切掉。
+Kevin：see. code block should kept as, only normal text should compressed. 另外，`compress_text()` inline code 不切掉。
 Amy：沒錯。中文英文混，標點符號處理注意，輸出奇怪。連。
 Kevin：first priority next week. 先寫測試，Amy review pull request Friday. 其他問題嗎？沒，今天，thanks everyone!

@@ -853,6 +853,28 @@ def is_cjk_punctuation(ch):
     return 0x3000 <= cp <= 0x303F or 0xFF01 <= cp <= 0xFF65
 
 
+# Spacing for the zh-hant join: these ASCII marks never take a space before them,
+# and no space follows an opening bracket.
+NO_SPACE_BEFORE = set(")]}>,.!?;:%…'\"")
+NO_SPACE_AFTER = set("([{<")
+
+
+def needs_space(text, word):
+    """Should a space go between the text written so far and the next word? (zh-hant join)"""
+    if not text or not word or text.endswith("\n") or word.startswith("\n"):
+        return False
+    previous, following = text[-1], word[0]
+    if is_cjk_punctuation(previous) or is_cjk_punctuation(following):
+        return False
+    if is_chinese_char(previous) and is_chinese_char(following):
+        return False
+    if following in NO_SPACE_BEFORE or previous in NO_SPACE_AFTER:
+        return False
+    if (following == "-" and previous.isalnum()) or (previous == "-" and following.isalnum()):
+        return False  # 'csv - lingua' -> 'csv-lingua'
+    return True
+
+
 def words_to_text(words, lang="default"):
     """Join kept words. 'default' is exactly the reference (tokens_to_string).
 
@@ -867,9 +889,7 @@ def words_to_text(words, lang="default"):
         if i > 0:
             if word.startswith(WORDPIECE_PREFIX):
                 word = word[len(WORDPIECE_PREFIX):]
-            elif not (text.endswith("\n") or word.startswith("\n") or not text or not word
-                      or is_cjk_punctuation(text[-1]) or is_cjk_punctuation(word[0])
-                      or (is_chinese_char(text[-1]) and is_chinese_char(word[0]))):
+            elif needs_space(text, word):
                 word = " " + word
         for dirty, clean in DECODER_CLEANUP:
             word = word.replace(dirty, clean)
@@ -1036,9 +1056,14 @@ def render(compression_plan, rate=0.6, drop_consecutive=True, word_weight=None):
     only the word merging and the threshold.
     """
     lang = compression_plan["lang"]
-    return "".join(part["code"] if "code" in part else
-                   apply_rate(part["chunks"], part["token_map"], rate, lang, drop_consecutive, word_weight)
-                   for part in compression_plan["parts"])
+    text = ""
+    for part in compression_plan["parts"]:
+        piece = part["code"] if "code" in part else \
+            apply_rate(part["chunks"], part["token_map"], rate, lang, drop_consecutive, word_weight)
+        # the space that separated a code block from the words around it was itself
+        # dropped during compression, so put one back where it is needed
+        text += (" " if needs_space(text, piece) else "") + piece
+    return text
 
 
 def compress(text, tokenizer, model, rate=0.6, lang="auto", drop_consecutive=True,
@@ -1081,6 +1106,8 @@ def compress_text(text, rate=0.6, lang="auto", model_dir=MODEL_DIR, protect_code
     protect_code ``` blocks and `inline code` are copied through untouched
     The first call loads the model (a few seconds); later calls are fast.
     """
+    if not 0 < rate <= 1:
+        raise ValueError(f"rate must be above 0 and at most 1, got {rate}")
     tokenizer, model = get_tokenizer_and_model(model_dir)
     compressed, _ = compress(text, tokenizer, model, rate, lang, protect_code=protect_code)
     return compressed
