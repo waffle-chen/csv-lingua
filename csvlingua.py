@@ -468,7 +468,8 @@ def linear(x, W, b):
     x: n×d_in, W: d_out×d_in, b: d_out -> n×d_out
     Row r of W holds the weights feeding output unit r.
     """
-    return x @ W.T + b
+    y = np.matmul(x, W.T)
+    return np.add(y, b, out=y)  # add the bias into that same array: one less copy of n×d_out
 
 
 def layer_norm(x, gamma, beta, eps):
