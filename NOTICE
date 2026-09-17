@@ -1,0 +1,46 @@
+csv-lingua
+==========
+
+Model weights (model_csv/)
+--------------------------
+The CSV files in model_csv/ (weights, vocabulary, configuration) are a converted
+form of Microsoft's model
+
+    microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank
+    https://huggingface.co/microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank
+    revision 5f0c82792b7ea14c6484e015b6a072009496b7f2
+
+which is licensed under the Apache License, Version 2.0. The full license text
+is in LICENSE-MODEL.txt.
+
+Changes made: the float32 tensors of model.safetensors were written as decimal
+text with 7 decimal places (model_csv/, built by convert.py, not in the
+repository) and then quantized to 8 bits (model_csv_int8/, the shipped model):
+every weight matrix row is stored as one scale plus integers in [-127, 127].
+Biases, LayerNorm parameters and the classifier stay as 7-decimal numbers.
+The tokenizer vocabulary (vocab.txt) and the 100 tokens [NEW0]..[NEW99] that
+llmlingua adds at runtime were written to vocab.csv; config.json and tokenizer
+settings were written to config.csv. No weights were retrained or trimmed.
+
+The model is based on BERT-base multilingual cased by Google
+(https://github.com/google-research/bert, Apache License 2.0).
+
+Algorithm
+---------
+The compression steps reimplement Microsoft's LLMLingua-2 as found in
+https://github.com/microsoft/LLMLingua (MIT License), commit
+5a4c78ae18ab17a98cf997e8259354e546081d64, files llmlingua/prompt_compressor.py
+and llmlingua/utils.py.
+
+    Zhuoshi Pan, Qianhui Wu, Huiqiang Jiang, Menglin Xia, Xufang Luo, Jue Zhang,
+    Qingwei Lin, Victor Ruhle, Yuqing Yang, Chin-Yew Lin, H. Vicky Zhao, Lili Qiu,
+    Dongmei Zhang. "LLMLingua-2: Data Distillation for Efficient and Faithful
+    Task-Agnostic Prompt Compression." Findings of ACL 2024. arXiv:2403.12968.
+
+The tokenizer reimplements the behaviour of Hugging Face tokenizers
+(https://github.com/huggingface/tokenizers, Apache License 2.0).
+
+Example text
+------------
+examples/model_card.txt is the usage example from the model card above
+(Apache License 2.0). The other example texts were written for this project.

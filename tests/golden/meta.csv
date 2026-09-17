@@ -1,0 +1,9 @@
+key,value
+python,3.12.14
+torch,2.9.1+cpu
+transformers,4.57.6
+tiktoken,0.12.0
+llmlingua,0.2.2
+llmlingua_commit,5a4c78ae18ab17a98cf997e8259354e546081d64
+attn_implementation,sdpa
+torch_threads,1

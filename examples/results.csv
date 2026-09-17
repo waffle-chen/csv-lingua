@@ -1,0 +1,29 @@
+metric,value,note
+csv_total_gb,1.869,"model_csv/, all CSV files"
+csv_file_count,223,
+csv_largest_file_mb,45.0,bert.embeddings.word_embeddings.weight.part02.csv
+csv_decimals,7,
+load_full_model_s,18.2,all 22 embedding shards
+load_safetensors_s,0.3,for comparison: binary float32
+seconds_per_512_token_chunk_exact_erf,2.56,
+seconds_per_512_token_chunk_abramowitz_stegun,1.55,
+csv_precision_max_abs_dp_keep,3.3e-05,"CSV weights vs original float32 weights, 7268 tokens"
+parity_max_abs_dp_keep_csv_vs_reference,3.3e-05,our numpy + CSV vs PyTorch
+parity_max_abs_dp_keep_float32_vs_reference,1.3e-05,our numpy + float32 vs PyTorch
+abramowitz_stegun_max_abs_dp_keep,1.2e-05,fast GELU vs exact GELU
+parity_max_abs_hidden_state_all_layers,9.0e-05,"model_card, embedding output + 12 layers"
+labels_changed_by_weight_1_model_card,1/100,
+labels_changed_by_weight_1_meeting,53/1534,
+labels_changed_by_weight_1_meeting_rate033,44/1534,
+labels_changed_by_weight_1_no_chunk_end,62/1504,
+labels_changed_by_weight_1_zh_hant_default,44/1094,
+labels_changed_by_weight_1_zh_hant,20/1094,
+labels_changed_by_weight_1_total,224/6860,reference p_keep; tiktoken counts vs 1 per word
+labels_differing_ours_with_tiktoken_counts,0/6860,only the model differs
+labels_differing_ours_end_to_end,224/6860,our model + weight 1 vs llmlingua
+cli_meeting_wall_s,26.5,
+cli_meeting_load_s,17.8,
+cli_meeting_peak_ram_mb,910,
+cli_meeting_zh_hant_wall_s,15.8,
+cli_meeting_zh_hant_load_s,9.9,
+cli_meeting_zh_hant_peak_ram_mb,597,

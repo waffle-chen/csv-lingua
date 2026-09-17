@@ -1,0 +1,11 @@
+# DEV ONLY: environment for tools/reference_check.py (never needed at runtime)
+# Created with:  uv venv --python 3.12 .venv-ref
+#                uv pip install --python .venv-ref -r tools/requirements-ref.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.9.1+cpu
+transformers==4.57.6
+accelerate==1.10.1
+tiktoken==0.12.0
+nltk==3.9.2
+numpy==2.3.4
+llmlingua @ git+https://github.com/microsoft/LLMLingua@5a4c78ae18ab17a98cf997e8259354e546081d64

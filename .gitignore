@@ -1,0 +1,13 @@
+# Microsoft's original files (model.safetensors is binary; never commit it)
+downloads/
+
+# The full-precision CSV model (1.87 GB) is rebuilt by convert.py; only the
+# 8-bit model_csv_int8/ (0.59 GB) is committed
+model_csv/
+
+# Virtual environments (the reference environment lives in .venv-ref/)
+.venv*/
+
+# Python bytecode
+__pycache__/
+*.pyc

@@ -1,0 +1,21 @@
+case,text
+model_card,"John: So, um, I've been thinking about the project, you know, and I believe we need to, uh, make some changes. I mean, we want the project to succeed, right? So, like, I think we should consider maybe revising the timeline.
+Sarah: I totally agree, John. I mean, we have to be realistic, you know. The timeline is, like, too tight. You know what I mean? We should definitely extend it.
+"
+punctuation_numbers,"Q3 revenue rose 12.5% to $4,300,000 (vs. $3.9M); EBITDA: -0.7pp... e-mail a.b@c.io at 10:30am - #1!!! 3/4 ½ x² ① 1,000.00€ ~/path_to/file.txt [x]{y}<z>"
+accents,"Crème brûlée à la française, naïve café, Ångström, Øresund, São Paulo, Dvořák, Łódź, İstanbul, Straße, ǅ, Ｆｕｌｌｗｉｄｔｈ ｔｅｘｔ"
+quotes_dashes,"“Hello,” she said — ‘it’s fine’ – really… «bonjour» „Guten Tag“ don't it's"
+long_word,short aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb antidisestablishmentarianismantidisestablishmentarianismantidisestablishmentarianismantidisestablishmentarianism end
+blank_lines,"First line.
+
+
+Second line after blank lines.
+  
+	Tabbed
+Windows line
+"
+added_tokens,tight.[NEW0]Sarah said [NEW12] and [SEP] [CLS]x [MASK][PAD][UNK] [new0] [NEW100] [NEW99]
+invisible,zero​width soft­hyphen ﻿bom ctrldel �repl non breaking
+traditional_chinese,我們今天討論「產品規劃」，預算是三百五十萬元。臺灣、高雄；龜鑑驫麤𠀀，Python 3.12 很好用！
+cjk_mixed,日本語のテキスト、한국어 텍스트。ｶﾀｶﾅ 〇〆 㐀 ⺀
+emoji_scripts,Great job 👍🏽 🎉 👨‍👩‍👧 مرحبا بالعالم नमस्ते दुनिया สวัสดีชาวโลก
