@@ -182,6 +182,22 @@ python tools/measure.py
 
 `tools/reference_check.py` produced the golden data in `tests/golden/` by running Microsoft's own code (torch + transformers + llmlingua, see `tools/requirements-ref.txt`). Runtime code never imports it; the tests compare against the stored results.
 
+## Questions people ask
+
+**Why does the output read strangely?** It is written for a language model, not for a person. The model drops filler words, and the words are glued back together by the reference's own rule, which puts a space before punctuation it did not expect. A model reading the result still gets the facts.
+
+**How much does it actually save?** The 7 kB meeting example goes from 1,534 to 856 words (6,961 → 4,382 characters) at the default rate. Shorter prompts cost fewer tokens, which is the point.
+
+**Can I get exactly Microsoft's output?** Yes: `lang="default"`, `protect_code=False`, and the reference's own GPT-3.5 token counts reproduce llmlingua's result word for word (that is one of the tests). With the built-in estimate instead, 85 of 7,721 words differ.
+
+**Does it work for other languages?** The model is multilingual BERT, so it runs on any language it can tokenize, but it was fine-tuned on English meeting transcripts. Chinese has its own punctuation rules here; other languages use the English ones.
+
+**Why 512 tokens per chunk?** That is how many positions BERT has. Longer texts are cut after the last `.` or newline that fits, and each chunk gets its own threshold.
+
+**Is it safe to compress JSON, CSV or code?** Code in ``` fences or backticks is copied through untouched. Structured data is not protected: compressing it would break the syntax, so keep it out or wrap it in a code fence.
+
+**Does it need a GPU?** No. It never needed PyTorch either.
+
 ## Limits
 
 - CPU only, and far slower than PyTorch: this is built to be read, not to be fast.
