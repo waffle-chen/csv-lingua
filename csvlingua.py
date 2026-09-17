@@ -835,17 +835,29 @@ def drop_repeated_force_tokens(words, word_probs, force_tokens, reduce_rate):
             between |= p > threshold
 
 
+def estimate_token_count(word):
+    """About how many GPT-3.5 tokens a word costs: one per seven characters.
+
+    The reference repeats each word probability once per GPT-3.5 (tiktoken) token
+    when it picks the threshold. tiktoken is not a dependency here, so this rough
+    rule stands in for it. Measured against the reference's own counts: it gets
+    70% of words exactly right, and it brings the keep/drop decisions much closer
+    to the reference than counting every word once (81 instead of 223 differing
+    words out of 7,212; 4 instead of 16 on a text that was not used to choose the
+    rule). See tests/test_compression.py.
+    """
+    return max(1, math.ceil(len(word) / 7))
+
+
 def keep_threshold(words, word_probs, reduce_rate, word_weight=None):
     """The percentile threshold: q = int(100·reduce_rate + 1), linear interpolation.
 
-    The reference repeats every word probability once per GPT-3.5 (tiktoken) token of
-    the word. tiktoken is not allowed here, so by default every word counts once
-    (word_weight=None). Pass word_weight(word) -> int to use other counts.
+    Every word probability is repeated word_weight(word) times, which defaults to
+    estimate_token_count. Pass a function of your own (for example lambda word: 1)
+    to weigh words differently.
     """
-    if word_weight is None:
-        values = word_probs
-    else:
-        values = [p for word, p in zip(words, word_probs) for _ in range(word_weight(word))]
+    weight = estimate_token_count if word_weight is None else word_weight
+    values = [p for word, p in zip(words, word_probs) for _ in range(weight(word))]
     return np.percentile(values, int(100 * reduce_rate + 1))
 
 

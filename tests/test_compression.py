@@ -3,8 +3,8 @@
 Two views:
   - exact: feed the reference's own p_keep and GPT-3.5 token counts into our code;
     chunks, words, labels and the compressed text must be identical.
-  - ours: our CSV model's p_keep and our default weight of 1 per word; the label
-    agreement is measured and must stay high.
+  - ours: our CSV model's p_keep and our own estimate of the GPT-3.5 token counts;
+    the label agreement is measured and must stay high.
 """
 import unittest
 from pathlib import Path
@@ -33,6 +33,8 @@ def case_input(case):
         # Chinese + English + code, with Microsoft's settings (the reference has no
         # code protection, so this case checks the tokenizer and the model on it)
         "mixed": (read_example("mixed.txt"), "default", 0.6),
+        # kept out of the tuning of estimate_token_count, used to check it
+        "interview": (read_example("interview.txt"), "default", 0.6),
         "zh_hant_default": (read_example("meeting.zh-hant.txt"), "default", 0.6),
         "zh_hant": (read_example("meeting.zh-hant.txt"), "zh-hant", 0.6),
     }[case]
@@ -112,6 +114,29 @@ class ExactReferenceSteps(unittest.TestCase):
                 self.assertLess(np.abs(np.array(ours, dtype=np.float64) - reference).max(), 1e-7)
 
 
+class WordWeighting(unittest.TestCase):
+    """estimate_token_count stands in for tiktoken when the threshold is picked."""
+
+    def differing_labels(self, word_weight):
+        return sum(label_agreement(case, run_case(case, reference_p_keep(case), word_weight))[1]
+                   for case in golden_data.COMPRESSION_CASES)
+
+    def test_beats_counting_every_word_once(self):
+        with_estimate = self.differing_labels(None)
+        one_per_word = self.differing_labels(lambda word: 1)
+        self.assertLess(with_estimate, one_per_word * 0.6)
+
+    def test_reference_counts_reproduce_the_reference_exactly(self):
+        for case in golden_data.COMPRESSION_CASES:
+            with self.subTest(case=case):
+                chunks = run_case(case, reference_p_keep(case), tiktoken_counts(case).__getitem__)
+                self.assertEqual(label_agreement(case, chunks)[1], 0)
+
+    def test_estimate_examples(self):
+        self.assertEqual([csvlingua.estimate_token_count(w) for w in ["a", "words", "timeline", "我", "x" * 21]],
+                         [1, 1, 2, 1, 3])
+
+
 @unittest.skipUnless(golden_data.HAS_INT8_MODEL, "model_csv_int8/ missing")
 class Int8ModelEndToEnd(unittest.TestCase):
     """The shipped 8-bit model against llmlingua's own keep/drop labels."""
@@ -121,9 +146,9 @@ class Int8ModelEndToEnd(unittest.TestCase):
             with self.subTest(case=case):
                 p_keep = golden_data.our_p_keep(case, csvlingua.MODEL_DIR)
                 exact_weights = run_case(case, p_keep, tiktoken_counts(case).__getitem__)
-                weight_one = run_case(case, p_keep, None)
+                estimated = run_case(case, p_keep, None)
                 self.assertGreaterEqual(label_agreement(case, exact_weights)[0], 0.98)
-                self.assertGreaterEqual(label_agreement(case, weight_one)[0], 0.95)
+                self.assertGreaterEqual(label_agreement(case, estimated)[0], 0.95)
 
 
 @unittest.skipUnless(golden_data.HAS_FULL_MODEL, "model_csv/ not built (python convert.py)")
@@ -132,9 +157,9 @@ class FullModelEndToEnd(unittest.TestCase):
         for case in golden_data.COMPRESSION_CASES:
             with self.subTest(case=case):
                 exact_weights = run_case(case, golden_data.our_p_keep(case), tiktoken_counts(case).__getitem__)
-                weight_one = run_case(case, golden_data.our_p_keep(case), None)
+                estimated = run_case(case, golden_data.our_p_keep(case), None)
                 self.assertGreaterEqual(label_agreement(case, exact_weights)[0], 0.995)
-                self.assertGreaterEqual(label_agreement(case, weight_one)[0], 0.95)
+                self.assertGreaterEqual(label_agreement(case, estimated)[0], 0.95)
 
 
 class ChinesePunctuationTidy(unittest.TestCase):

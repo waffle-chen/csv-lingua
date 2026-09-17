@@ -8,7 +8,7 @@ Feed it a long text, get a shorter one that keeps the important words, so a prom
 John: So, um, I've been thinking about the project, you know, and I believe we need to,
 uh, make some changes. I mean, we want the project to succeed, right?
 
-  ->  John : So, ' been thinking about project, believe we need to, make changes.,
+  ->  John :, ' been thinking about project, believe we need to, make changes.,
       want project to succeed, right?
 ```
 
@@ -93,7 +93,7 @@ short = compress_text(f.read(), rate=0.6)
 3. **Chunk.** Up to 510 tokens, cut after the last `.` or newline, wrapped in `[CLS] … [SEP]`.
 4. **BERT** (`bert_forward`): `h = LayerNorm(E_word + E_pos + E_type)`, then 12 × (`a = LayerNorm(h + W_o·Attention(h))`, `h = LayerNorm(a + W_2·GELU(W_1·a))`), then `p_keep = softmax(W_c·h)[:, 1]`.
 5. **Words** (`merge_tokens_to_word`): a word's probability is the mean over its tokens; protected punctuation gets 1.0.
-6. **Threshold** (`keep_threshold`): per chunk, the `int(100·(1−rate)+1)`-th percentile; words above it are kept.
+6. **Threshold** (`keep_threshold`): per chunk, the `int(100·(1−rate)+1)`-th percentile of the word probabilities, each word counted once per seven characters (`estimate_token_count`, standing in for GPT-3.5's token count); words above it are kept.
 7. **Join** (`words_to_text`) the kept words back into text.
 
 Everything is in [`csvlingua.py`](csvlingua.py), in that order. Steps 4 and 5–7 are separate calls (`run_model`, `render`), so you can run the model once and then try several rates instantly.
@@ -113,7 +113,7 @@ python tools/walkthrough.py "your sentence here"
 | [`convert.py`](convert.py) | Microsoft's `model.safetensors` → `model_csv/` (the only file that reads the binary) |
 | [`quantize.py`](quantize.py) | `model_csv/` → `model_csv_int8/` |
 | [`model_csv_int8/`](model_csv_int8) | the shipped model: config, vocabulary, manifest, weights |
-| [`examples/`](examples) | input texts, their compressed output, traces, measurements, walkthrough |
+| [`examples/`](examples) | input texts (English, Chinese, mixed, interview), compressed output, traces, measurements, walkthrough |
 | [`tests/`](tests) | unit tests plus `golden/`: what Microsoft's code produced for the same inputs |
 | [`tools/`](tools) | dev only: `reference_check.py`, `measure.py`, `walkthrough.py` |
 
@@ -145,24 +145,24 @@ All numbers come from a real run of `python tools/measure.py` on an AMD Ryzen 5 
 | 8-bit model | **0.591 GB**, 223 files, largest 14.4 MB |
 | Full-precision model (optional, not shipped) | 1.869 GB |
 | Load for one document | **3.8 s** (only the embedding rows the text needs) |
-| One 512-token chunk through BERT | **0.98 s** (2.46 s in the first version) |
+| One 512-token chunk through BERT | **0.97 s** (2.49 s in the first version) |
 | Whole run: 7 kB meeting → 906 of 1534 words | **7.5 s**, 821 MB RAM |
 | Tokenizer | 3.6 M characters/s |
-| CSV parser | 29 MB/s on one thread, 76 MB/s on all cores |
+| CSV parser | 30 MB/s on one thread, 86 MB/s on all cores |
 | Long document: 104 kB, 50 chunks | 3.8 s load + 46 s BERT, about 2 k characters/s |
 
 Accuracy against Microsoft's official implementation (llmlingua 0.2.2 with PyTorch), over 7,268 tokens of English and Chinese:
 
 | | |
 |---|---|
-| Keep/drop decision, 8-bit model | **95.9–99.0 %** of words identical |
+| Keep/drop decision, 8-bit model | **96.0–99.8 %** of words identical |
 | … when given the reference's GPT-3.5 token counts | **98.9–100 %** |
-| 8-bit vs full-precision model | 98.0–100 % of words identical |
+| 8-bit vs full-precision model | 99.1–100 % of words identical |
 | Full-precision CSV vs PyTorch | max \|Δ keep-probability\| **3.3×10⁻⁵** |
 
 Where the remaining differences come from:
 
-1. The reference weights each word by its GPT-3.5 (tiktoken) token count when it picks the threshold. tiktoken is not a dependency here, so every word counts once. That alone changes 219 of 6,860 words.
+1. The reference weights each word by its GPT-3.5 (tiktoken) token count when it picks the threshold. tiktoken is not a dependency here, so `estimate_token_count` stands in for it with one token per seven characters. That alone changes 85 of 7,721 words — counting every word once instead would change 239. The rule was chosen on the example texts and checked on `examples/interview.txt`, which was not used to pick it.
 2. 8-bit rounding moves probabilities that sit right at the threshold.
 
 Speed-ups were checked to be **bit-identical**: the keep-probabilities of 19 chunks, and the compressed text for 8 texts × 2 languages × 4 rates, are unchanged from the first, slow implementation.

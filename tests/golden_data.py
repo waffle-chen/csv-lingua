@@ -7,7 +7,7 @@ from pathlib import Path
 import csvlingua
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
-COMPRESSION_CASES = ["model_card", "meeting", "meeting_rate033", "no_chunk_end", "mixed", "zh_hant_default", "zh_hant"]
+COMPRESSION_CASES = ["model_card", "meeting", "meeting_rate033", "no_chunk_end", "mixed", "interview", "zh_hant_default", "zh_hant"]
 
 
 def read_rows(name):

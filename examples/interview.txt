@@ -1,0 +1,12 @@
+Interviewer: Thanks for making the time today. Could you start by telling me a little about what you do at the hospital?
+Dr. Okafor: Of course. I'm a paediatric respiratory consultant, so I look after children with asthma, cystic fibrosis, and a long tail of rarer conditions. About half my week is clinic, the rest is ward rounds, teaching, and, unfortunately, quite a lot of paperwork.
+Interviewer: You mentioned paperwork. How much of your day goes into it?
+Dr. Okafor: Honestly? Two to three hours. Discharge summaries are the worst offender. A summary for a complicated admission can take forty minutes, and I usually write them after the last clinic, when I'm tired and most likely to make a mistake. We have templates, but they were written for adults, so half the fields do not apply and the important things, like growth measurements or inhaler technique, are not there at all.
+Interviewer: Have you looked at any tools to help with that?
+Dr. Okafor: We trialled a dictation system two years ago. It was fast, but it could not tell the difference between "hypertension" and "hypotension" in a noisy ward, which is not a mistake you can tolerate. The vendor's answer was to speak more slowly. That is not realistic at seven in the evening with three families waiting.
+Interviewer: What would a good tool look like to you?
+Dr. Okafor: It should draft, not decide. Give me a first version built from what is already in the record, mark clearly which parts it took from where, and let me correct it in one pass. And it has to be quick. If it takes longer than typing, nobody will use it twice, no matter how clever it is.
+Interviewer: Is there anything you would refuse to hand over to software?
+Dr. Okafor: The judgement calls. Whether a child is safe to go home, whether the family understood the plan, whether something does not add up and deserves another look. Those come from the conversation in the room, and they are not in the record at all. A tool that pretends otherwise is dangerous.
+Interviewer: Last question. If this worked well, what would change for you?
+Dr. Okafor: I would leave on time more often, and the summaries the GP receives would actually be useful. Right now they get a wall of text that hides the one line that matters, which is usually what to do if the child gets worse again.

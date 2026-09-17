@@ -124,18 +124,24 @@ def measure_parity(int8_model):
         record("full_max_abs_hidden_state_all_layers", f"{worst:.1e}", "model_card, embeddings + 12 layers")
 
     print("Word labels")
-    changed = total = 0
+    estimated = one_per_word = total = 0
     for case in CASES:
-        counts = tiktoken_counts(case).__getitem__
-        a = [x for c in run_case(case, reference_p_keep(case), counts) for x in c["labels"]]
-        b = [x for c in run_case(case, reference_p_keep(case), None) for x in c["labels"]]
-        changed += sum(x != y for x, y in zip(a, b))
-        total += len(a)
-    record("labels_changed_by_weight_1", f"{changed}/{total}",
-           "reference p_keep; GPT-3.5 token counts vs 1 per word")
+        reference = [x for c in run_case(case, reference_p_keep(case), tiktoken_counts(case).__getitem__)
+                     for x in c["labels"]]
+        for rule, name in [(None, "estimated"), (lambda word: 1, "one")]:
+            ours = [x for c in run_case(case, reference_p_keep(case), rule) for x in c["labels"]]
+            changed = sum(x != y for x, y in zip(ours, reference))
+            if name == "estimated":
+                estimated += changed
+            else:
+                one_per_word += changed
+        total += len(reference)
+    record("labels_changed_by_token_estimate", f"{estimated}/{total}",
+           "reference p_keep; estimate_token_count vs the real GPT-3.5 counts")
+    record("labels_changed_by_one_per_word", f"{one_per_word}/{total}", "the simpler rule, for comparison")
     agreement = [label_agreement(case, run_case(case, int8[case], None))[0] for case in CASES]
     record("int8_label_agreement_with_reference", f"{100 * min(agreement):.1f}-{100 * max(agreement):.1f}%",
-           "8-bit model and weight 1 vs llmlingua")
+           "8-bit model and the token-count estimate vs llmlingua")
     agreement = [label_agreement(case, run_case(case, int8[case], tiktoken_counts(case).__getitem__))[0]
                  for case in CASES]
     record("int8_label_agreement_with_token_counts", f"{100 * min(agreement):.1f}-{100 * max(agreement):.1f}%",

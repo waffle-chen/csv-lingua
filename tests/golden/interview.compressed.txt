@@ -1,0 +1,12 @@
+Interviewer Thanks for making time today. start telling me about what do at hospital? 
+ Dr. Okafor. paediatric respiratory consultant, look after children with asthma, cystic fibrosis, tail rarer conditions. half my week is clinic, rest ward rounds, teaching, paperwork. 
+ mentioned paperwork. How much day goes? 
+.? Two to three hours. Discharge summaries worst offender. summary for complicated admission forty minutes, write after last clinic, tired likely to mistake. templates, written for adults, half fields not apply important things, growth measurements inhaler technique, not there. 
+ looked at tools to help? 
+. trialled dictation system two years ago. fast, tell difference between hypertension " and hypotension " in noisy ward, not mistake. vendor ' s answer to speak slowly. not realistic at seven three families waiting. 
+ good tool look? 
+. should draft, not decide. first version built from record, mark parts took from, correct in one pass. quick. takes longer than typing, nobody use twice,. 
+ anything refuse to hand over to software? 
+. judgement calls. child safe to go home, family understood plan, add up deserves another look. from conversation room, not in record. tool pretends otherwise dangerous. 
+Interviewer Last question. worked well, change? 
+ Dr. Okafor leave time often, summaries GP receives useful. get wall text hides one line matters, what do if child worse again. 

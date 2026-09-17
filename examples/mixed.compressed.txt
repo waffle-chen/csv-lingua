@@ -8,5 +8,5 @@ with open("notes.txt", encoding="utf-8") as f:
 print(len(short))
 ```
 Kevin：see. code block should kept as, only normal text should compressed. 另外，`compress_text()` inline code 不切掉。
-Amy：沒錯。中文英文混，標點符號處理注意，輸出奇怪。連。
+Amy：沒錯。中文英文混，標點符號處理注意，輸出奇怪。
 Kevin：first priority next week. 先寫測試，Amy review pull request Friday. 其他問題嗎？沒，今天，thanks everyone!

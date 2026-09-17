@@ -4,24 +4,25 @@ int8_largest_file_mb,14.4,bert.embeddings.word_embeddings.weight.part19.csv
 full_total_gb,1.869,"model_csv/, 223 files, 7 decimals"
 load_int8_for_one_text_s,3.8,543 embedding rows
 load_int8_whole_model_s,7.5,"all 119,647 embedding rows"
-csv_parser_mb_per_s_one_thread,29,
-csv_parser_mb_per_s_all_cores,76,
-tokenizer_k_chars_per_s,3587,32500 tokens from 139 k chars
-seconds_per_512_token_chunk_exact,0.98,
-seconds_per_512_token_chunk_fast_gelu,0.79,
-seconds_per_512_token_chunk_first_version,2.46,"np.vectorize(math.erf), one thread"
+csv_parser_mb_per_s_one_thread,30,
+csv_parser_mb_per_s_all_cores,86,
+tokenizer_k_chars_per_s,3561,32500 tokens from 139 k chars
+seconds_per_512_token_chunk_exact,0.97,
+seconds_per_512_token_chunk_fast_gelu,0.73,
+seconds_per_512_token_chunk_first_version,2.49,"np.vectorize(math.erf), one thread"
 speed_up_is_bit_identical,True,
-int8_max_abs_dp_keep_vs_reference,5.6e-01,7268 tokens
+int8_max_abs_dp_keep_vs_reference,5.6e-01,8243 tokens
 full_max_abs_dp_keep_vs_reference,3.3e-05,7-decimal CSV weights
 full_max_abs_hidden_state_all_layers,9.0e-05,"model_card, embeddings + 12 layers"
-labels_changed_by_weight_1,219/6860,reference p_keep; GPT-3.5 token counts vs 1 per word
-int8_label_agreement_with_reference,95.9-99.0%,8-bit model and weight 1 vs llmlingua
+labels_changed_by_token_estimate,85/7721,reference p_keep; estimate_token_count vs the real GPT-3.5 counts
+labels_changed_by_one_per_word,239/7721,"the simpler rule, for comparison"
+int8_label_agreement_with_reference,96.0-99.8%,8-bit model and the token-count estimate vs llmlingua
 int8_label_agreement_with_token_counts,98.9-100.0%,"same, but with the reference's GPT-3.5 token counts"
-int8_vs_full_label_agreement,98.0-100.0%,"4 texts, rates (0.3, 0.5, 0.6, 0.8)"
-int8_vs_full_kept_word_similarity,96.6-100.0%,
-cli_meeting_wall_s,7.5,"1534 -> 906 (59.1% kept, target rate 0.6)"
-cli_meeting_peak_ram_mb,821,
+int8_vs_full_label_agreement,99.1-100.0%,"4 texts, rates (0.3, 0.5, 0.6, 0.8)"
+int8_vs_full_kept_word_similarity,98.1-100.0%,
+cli_meeting_wall_s,7.6,"1534 -> 856 (55.8% kept, target rate 0.6)"
+cli_meeting_peak_ram_mb,838,
 cli_meeting_zh_hant_wall_s,6.3,"1094 -> 620 (56.7% kept, target rate 0.6)"
-cli_meeting_zh_hant_peak_ram_mb,835,
-cli_mixed_wall_s,5.2,"289 -> 163 (56.4% kept, target rate 0.6)"
-cli_mixed_peak_ram_mb,849,
+cli_meeting_zh_hant_peak_ram_mb,806,
+cli_mixed_wall_s,5.3,"289 -> 161 (55.7% kept, target rate 0.6)"
+cli_mixed_peak_ram_mb,800,

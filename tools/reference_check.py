@@ -248,6 +248,7 @@ def main():
     no_chunk_end = meeting.replace(".", ";").replace("\n", " ")
     golden_case(compressor, "no_chunk_end", no_chunk_end, MODEL_CARD_SETTINGS)
     golden_case(compressor, "mixed", read_text(EXAMPLES / "mixed.txt"), MODEL_CARD_SETTINGS)
+    golden_case(compressor, "interview", read_text(EXAMPLES / "interview.txt"), MODEL_CARD_SETTINGS)
     golden_case(compressor, "zh_hant_default", zh, MODEL_CARD_SETTINGS)
     golden_case(compressor, "zh_hant", zh, ZH_HANT_SETTINGS)
 
