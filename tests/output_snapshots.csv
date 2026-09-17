@@ -1,0 +1,16 @@
+example,lang,rate,words_kept,characters,sha256_16
+model_card,default,0.3,27,88,98ec1faafdd9667a
+model_card,default,0.6,57,233,9e0918e8500fdde4
+model_card,default,0.9,89,356,f77fd823cd43d5f9
+meeting,default,0.3,411,1832,0ffb8619d8a3ff76
+meeting,default,0.6,856,4382,47d6221a28a85cf0
+meeting,default,0.9,1366,6468,0fd9fca27cf7e674
+meeting.zh-hant,zh-hant,0.3,262,262,0a50c38cf195484e
+meeting.zh-hant,zh-hant,0.6,620,620,55f126bb5eea6be2
+meeting.zh-hant,zh-hant,0.9,979,979,0bf6133e8fc428d2
+mixed,zh-hant,0.3,64,395,39a9934fbc8ba75a
+mixed,zh-hant,0.6,161,598,3cf07a2045535878
+mixed,zh-hant,0.9,254,769,845bb1bb54a37883
+interview,default,0.3,139,590,b2c7fd0149cc3aeb
+interview,default,0.6,288,1428,c156b598def81af8
+interview,default,0.9,454,2129,82f8d021df5425da

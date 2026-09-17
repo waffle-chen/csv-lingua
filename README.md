@@ -176,7 +176,7 @@ One caveat about "identical": numpy's BLAS adds up matrix products in an order t
 ```bash
 python convert.py    # download Microsoft's model.safetensors, write model_csv/ (1.87 GB, 7 decimals)
 python quantize.py   # model_csv/ -> model_csv_int8/ (0.59 GB)
-python -m unittest   # 52 tests; those needing model_csv/ skip if it is absent
+python -m unittest   # 53 tests; those needing model_csv/ skip if it is absent
 python tools/measure.py
 ```
 
